@@ -1,16 +1,13 @@
 // Copyright (c) ZeroC, Inc.
 
-use std::collections::HashMap;
-
+use crate::code_gen_util::TypeContext;
 use crate::comments::CommentTag;
 use crate::cs_attributes::CsType;
 use crate::cs_util::*;
 use crate::member_util::escape_parameter_name;
 use crate::slicec_ext::*;
 use slicec::code_block::CodeBlock;
-use slicec::grammar::{Class, Commentable, Encoding, Entity, Operation, *};
-use slicec::supported_encodings::SupportedEncodings;
-use slicec::utils::code_gen_util::TypeContext;
+use slicec::grammar::*;
 
 pub trait Builder {
     fn build(&self) -> CodeBlock;
@@ -142,9 +139,7 @@ impl ContainerBuilder {
 
     pub fn add_fields(&mut self, fields: &[&Field]) -> &mut Self {
         for field in fields {
-            let type_string = field
-                .data_type()
-                .cs_type_string(&field.namespace(), TypeContext::Field, false);
+            let type_string = field.data_type().field_type_string(&field.namespace(), false);
 
             self.add_field(
                 &field.field_name(),
@@ -186,7 +181,7 @@ impl Builder for ContainerBuilder {
             },
         );
 
-        let mut body_content: CodeBlock = self.contents.iter().cloned().collect();
+        let body_content: CodeBlock = self.contents.iter().cloned().collect();
 
         if body_content.is_empty() {
             code.writeln("{\n}");
@@ -338,7 +333,7 @@ impl FunctionBuilder {
         };
 
         for (index, parameter) in parameters.iter().enumerate() {
-            let parameter_type = parameter.cs_type_string(&operation.namespace(), context, false);
+            let parameter_type = parameter.cs_type_string(&operation.namespace(), context);
             let parameter_name = parameter.parameter_name();
 
             let default_value = if context == TypeContext::OutgoingParam && (index >= trailing_optional_parameters_index) {
@@ -612,80 +607,5 @@ impl CommentBuilder for FunctionBuilder {
     fn add_comments(&mut self, comments: Vec<CommentTag>) -> &mut Self {
         self.comments.extend(comments);
         self
-    }
-}
-
-pub struct EncodingBlockBuilder<'a> {
-    encoding_blocks: HashMap<Encoding, Box<dyn Fn() -> CodeBlock + 'a>>,
-    supported_encodings: SupportedEncodings,
-    encoding_variable: String,
-}
-
-impl<'a> EncodingBlockBuilder<'a> {
-    pub fn new(encoding_variable: &str, supported_encodings: SupportedEncodings) -> Self {
-        Self {
-            encoding_blocks: HashMap::new(),
-            supported_encodings,
-            encoding_variable: encoding_variable.to_owned(),
-        }
-    }
-
-    pub fn add_encoding_block<F>(&mut self, encoding: Encoding, func: F) -> &mut Self
-    where
-        F: 'a,
-        F: Fn() -> CodeBlock,
-    {
-        self.encoding_blocks.insert(encoding, Box::new(func));
-        self
-    }
-}
-impl<'a> Builder for EncodingBlockBuilder<'a> {
-    fn build(&self) -> CodeBlock {
-        match &self.supported_encodings[..] {
-            [] => panic!("No supported encodings"),
-            [encoding] => self.encoding_blocks[encoding](),
-            _ => {
-                let mut slice1_block = self.encoding_blocks[&Encoding::Slice1]();
-                let mut slice2_block = self.encoding_blocks[&Encoding::Slice2]();
-
-                // Only write one encoding block if `slice1_block` and `slice2_block` are the same.
-                if slice1_block.to_string() == slice2_block.to_string() {
-                    return slice2_block;
-                }
-
-                if slice1_block.is_empty() && !slice2_block.is_empty() {
-                    format!(
-                        "\
-if ({encoding_variable} != SliceEncoding.Slice1) // Slice2 only
-{{
-    {slice2_block}
-}}
-",
-                        encoding_variable = self.encoding_variable,
-                        slice2_block = slice2_block.indent(),
-                    )
-                    .into()
-                } else if !slice1_block.is_empty() && !slice2_block.is_empty() {
-                    format!(
-                        "\
-if ({encoding_variable} == SliceEncoding.Slice1)
-{{
-    {slice1_block}
-}}
-else // Slice2
-{{
-    {slice2_block}
-}}
-",
-                        encoding_variable = self.encoding_variable,
-                        slice1_block = slice1_block.indent(),
-                        slice2_block = slice2_block.indent(),
-                    )
-                    .into()
-                } else {
-                    panic!("it is not possible to have an empty Slice2 encoding block with a non empty Slice1 encoding block");
-                }
-            }
-        }
     }
 }

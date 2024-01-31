@@ -1,9 +1,9 @@
 // Copyright (c) ZeroC, Inc.
 
 use super::{EntityExt, MemberExt, ParameterExt, ParameterSliceExt};
+use crate::code_gen_util::TypeContext;
 use crate::cs_attributes::CsEncodedReturn;
 use slicec::grammar::{AttributeFunctions, Contained, Operation};
-use slicec::utils::code_gen_util::TypeContext;
 
 pub trait OperationExt {
     /// Returns the format that classes should be encoded with.
@@ -58,7 +58,7 @@ fn operation_return_type(operation: &Operation, is_dispatch: bool, context: Type
         if let Some(stream_member) = operation.streamed_return_member() {
             format!(
                 "(global::System.IO.Pipelines.PipeReader Payload, {} {})",
-                stream_member.cs_type_string(&namespace, context, false),
+                stream_member.cs_type_string(&namespace, context),
                 stream_member.field_name(),
             )
         } else {
@@ -67,8 +67,8 @@ fn operation_return_type(operation: &Operation, is_dispatch: bool, context: Type
     } else {
         match operation.return_members().as_slice() {
             [] => "void".to_owned(),
-            [member] => member.cs_type_string(&namespace, context, false),
-            members => members.to_tuple_type(&namespace, context, false),
+            [member] => member.cs_type_string(&namespace, context),
+            members => members.to_tuple_type(&namespace, context),
         }
     }
 }

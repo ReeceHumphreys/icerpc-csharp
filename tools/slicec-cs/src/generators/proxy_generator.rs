@@ -3,6 +3,7 @@
 use crate::builders::{
     AttributeBuilder, Builder, CommentBuilder, ContainerBuilder, FunctionBuilder, FunctionCallBuilder, FunctionType,
 };
+use crate::code_gen_util::TypeContext;
 use crate::decoding::*;
 use crate::encoding::*;
 use crate::member_util::*;
@@ -10,7 +11,6 @@ use crate::slicec_ext::*;
 use slicec::code_block::CodeBlock;
 use slicec::grammar::attributes::Oneway;
 use slicec::grammar::*;
-use slicec::utils::code_gen_util::*;
 
 pub fn generate_proxy(interface_def: &Interface) -> CodeBlock {
     let namespace = interface_def.namespace();
@@ -42,7 +42,7 @@ pub fn generate_proxy(interface_def: &Interface) -> CodeBlock {
         .add_comments(interface_def.formatted_doc_comment_seealso())
         .add_bases(&interface_bases)
         .add_block(proxy_interface_operations(interface_def));
-    code.add_block(&proxy_interface_builder.build());
+    code.add_block(proxy_interface_builder.build());
 
     let mut proxy_impl_builder =
         ContainerBuilder::new(&format!("{access} readonly partial record struct"), &proxy_impl);
@@ -118,7 +118,7 @@ public static implicit operator {base_impl}({proxy_impl} proxy) =>
         proxy_impl_builder.add_block(proxy_operation_impl(operation));
     }
 
-    code.add_block(&proxy_impl_builder.build());
+    code.add_block(proxy_impl_builder.build());
 
     let mut proxy_encoder_builder = ContainerBuilder::new(
         &format!("{access} static class"),
@@ -170,7 +170,7 @@ Provides an extension method for <see cref="SliceEncoder" /> to encode a <see cr
         );
     }
 
-    code.add_block(&proxy_encoder_builder.build());
+    code.add_block(proxy_encoder_builder.build());
 
     let mut proxy_decoder_builder = ContainerBuilder::new(
         &format!("{access} static class"),
@@ -222,7 +222,7 @@ Provides an extension method for <see cref="SliceDecoder" /> to decode a <see cr
         );
     }
 
-    code.add_block(&proxy_decoder_builder.build());
+    code.add_block(proxy_decoder_builder.build());
 
     code
 }
@@ -347,7 +347,7 @@ if ({features_parameter}?.Get<IceRpc.Features.ICompressFeature>() is null)
                 invocation_builder.add_argument(
                     FunctionCallBuilder::new(format!(
                         "{stream_parameter_name}.ToPipeReader<{}>",
-                        stream_type.cs_type_string(namespace, TypeContext::OutgoingParam, false),
+                        stream_type.outgoing_parameter_type_string(namespace, false),
                     ))
                     .use_semicolon(false)
                     .add_argument(encode_stream_parameter(stream_type, namespace, operation.encoding).indent())
@@ -438,7 +438,7 @@ fn proxy_interface_operations(interface_def: &Interface) -> CodeBlock {
             .add_operation_parameters(operation, TypeContext::OutgoingParam)
             .add_comments(operation.formatted_doc_comment_seealso())
             .add_obsolete_attribute(operation);
-        code.add_block(&builder.build());
+        code.add_block(builder.build());
     }
 
     code
@@ -486,7 +486,7 @@ fn request_class(interface_def: &Interface) -> CodeBlock {
 
         for param in &params {
             builder.add_parameter(
-                &param.cs_type_string(namespace, TypeContext::OutgoingParam, false),
+                &param.cs_type_string(namespace, TypeContext::OutgoingParam),
                 &param.parameter_name(),
                 None,
                 param.formatted_param_doc_comment(),
@@ -554,7 +554,7 @@ fn response_class(interface_def: &Interface) -> CodeBlock {
         } else {
             format!(
                 "global::System.Threading.Tasks.ValueTask<{}>",
-                members.to_tuple_type(namespace, TypeContext::IncomingParam, false),
+                members.to_tuple_type(namespace, TypeContext::IncomingParam),
             )
         };
 
@@ -595,6 +595,7 @@ fn response_class(interface_def: &Interface) -> CodeBlock {
 fn response_operation_body(operation: &Operation) -> CodeBlock {
     let mut code = CodeBlock::default();
     let namespace = &operation.namespace();
+    let encoding = operation.encoding;
     let non_streamed_members = operation.non_streamed_return_members();
     let return_void = operation.return_members().is_empty();
 
@@ -611,7 +612,7 @@ await response.DecodeVoidReturnValueAsync(
     defaultActivator: null,
     cancellationToken).ConfigureAwait(false);
 ",
-                encoding = operation.encoding.to_cs_encoding(),
+                encoding = encoding.to_cs_encoding(),
             );
         } else {
             writeln!(
@@ -621,13 +622,13 @@ var {return_value} = await response.DecodeReturnValueAsync(
     request,
     {encoding},
     sender,
-    {return_value_decode_func},
+    {return_value_decode_fn},
     defaultActivator: null,
     cancellationToken).ConfigureAwait(false);
 ",
-                return_value = non_streamed_members.to_argument_tuple("sliceP_"),
-                encoding = operation.encoding.to_cs_encoding(),
-                return_value_decode_func = return_value_decode_func(operation).indent(),
+                return_value = non_streamed_members.to_argument_tuple(),
+                encoding = encoding.to_cs_encoding(),
+                return_value_decode_fn = decode_non_streamed_parameters_func(&non_streamed_members, encoding).indent(),
             );
         }
 
@@ -637,7 +638,7 @@ var {return_value} = await response.DecodeReturnValueAsync(
                 writeln!(
                     code,
                     "var {} = IceRpc.IncomingFrameExtensions.DetachPayload(response);",
-                    stream_member.parameter_name_with_prefix("sliceP_"),
+                    stream_member.parameter_name_with_prefix(),
                 )
             }
             _ => writeln!(
@@ -646,16 +647,12 @@ var {return_value} = await response.DecodeReturnValueAsync(
 var payloadContinuation = IceRpc.IncomingFrameExtensions.DetachPayload(response);
 var {stream_parameter_name} = {decode_operation_stream}
 ",
-                stream_parameter_name = stream_member.parameter_name_with_prefix("sliceP_"),
-                decode_operation_stream = decode_operation_stream(stream_member, namespace, operation.encoding, false),
+                stream_parameter_name = stream_member.parameter_name_with_prefix(),
+                decode_operation_stream = decode_operation_stream(stream_member, namespace, encoding, false),
             ),
         }
 
-        writeln!(
-            code,
-            "return {};",
-            operation.return_members().to_argument_tuple("sliceP_"),
-        );
+        writeln!(code, "return {};", operation.return_members().to_argument_tuple());
     } else if return_void {
         writeln!(
             code,
@@ -667,8 +664,8 @@ response.DecodeVoidReturnValueAsync(
     defaultActivator: {default_activator},
     cancellationToken)
 ",
-            encoding = operation.encoding.to_cs_encoding(),
-            default_activator = default_activator(operation.encoding),
+            encoding = encoding.to_cs_encoding(),
+            default_activator = default_activator(encoding),
         );
     } else {
         writeln!(
@@ -678,17 +675,17 @@ response.DecodeReturnValueAsync(
     request,
     {encoding},
     sender,
-    {return_value_decode_func},
+    {return_value_decode_fn},
     defaultActivator: {default_activator},
     cancellationToken)
 ",
-            encoding = operation.encoding.to_cs_encoding(),
-            return_value_decode_func = return_value_decode_func(operation).indent(),
-            default_activator = default_activator(operation.encoding),
+            encoding = encoding.to_cs_encoding(),
+            return_value_decode_fn = decode_non_streamed_parameters_func(&non_streamed_members, encoding).indent(),
+            default_activator = default_activator(encoding),
         );
     }
 
-    if operation.encoding == Encoding::Slice1 {
+    if encoding == Encoding::Slice1 {
         let mut try_catch_block = CodeBlock::default();
         let decode_response = code.indent();
 
@@ -732,29 +729,5 @@ catch {catch_expression}
         try_catch_block
     } else {
         code
-    }
-}
-
-fn return_value_decode_func(operation: &Operation) -> CodeBlock {
-    let namespace = &operation.namespace();
-    // vec of members
-    let members = operation.non_streamed_return_members();
-    assert!(!members.is_empty());
-
-    if members.len() == 1
-        && get_bit_sequence_size(operation.encoding, &members) == 0
-        && !members.first().unwrap().is_tagged()
-    {
-        decode_func(members.first().unwrap().data_type(), namespace, operation.encoding)
-    } else {
-        format!(
-            "\
-(ref SliceDecoder decoder) =>
-{{
-    {decode}
-}}",
-            decode = decode_operation(operation, false).indent(),
-        )
-        .into()
     }
 }

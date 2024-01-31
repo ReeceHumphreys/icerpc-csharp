@@ -1,15 +1,15 @@
 // Copyright (c) ZeroC, Inc.
 
 use super::{EntityExt, TypeRefExt};
+use crate::code_gen_util::TypeContext;
 use crate::cs_attributes::CsReadonly;
 use crate::cs_util::{escape_keyword, format_comment_message};
 use convert_case::Case;
 use slicec::grammar::*;
-use slicec::utils::code_gen_util::TypeContext;
 
 pub trait MemberExt {
     fn parameter_name(&self) -> String;
-    fn parameter_name_with_prefix(&self, prefix: &str) -> String;
+    fn parameter_name_with_prefix(&self) -> String;
     fn field_name(&self) -> String;
 }
 
@@ -18,9 +18,9 @@ impl<T: Member> MemberExt for T {
         escape_keyword(&self.cs_identifier(Case::Camel))
     }
 
-    fn parameter_name_with_prefix(&self, prefix: &str) -> String {
-        let name = prefix.to_owned() + &self.cs_identifier(Case::Camel);
-        escape_keyword(&name)
+    /// Returns this parameter's C# identifier (in camel case) with a `sliceP_` prefix.
+    fn parameter_name_with_prefix(&self) -> String {
+        format!("sliceP_{}", self.cs_identifier(Case::Camel))
     }
 
     fn field_name(&self) -> String {
@@ -63,7 +63,7 @@ impl FieldExt for Field {
 }
 
 pub trait ParameterExt {
-    fn cs_type_string(&self, namespace: &str, context: TypeContext, ignore_optional: bool) -> String;
+    fn cs_type_string(&self, namespace: &str, context: TypeContext) -> String;
 
     /// Returns the message of the `@param` tag corresponding to this parameter from the operation it's part of.
     /// If the operation has no doc comment, or a matching `@param` tag, this returns `None`.
@@ -71,8 +71,14 @@ pub trait ParameterExt {
 }
 
 impl ParameterExt for Parameter {
-    fn cs_type_string(&self, namespace: &str, context: TypeContext, ignore_optional: bool) -> String {
-        let type_str = self.data_type().cs_type_string(namespace, context, ignore_optional);
+    fn cs_type_string(&self, namespace: &str, context: TypeContext) -> String {
+        // TODO this can be further simplified.
+        let type_str = match context {
+            TypeContext::OutgoingParam => self.data_type().outgoing_parameter_type_string(namespace, false),
+            TypeContext::IncomingParam => self.data_type().incoming_parameter_type_string(namespace, false),
+            TypeContext::Field => unreachable!(),
+        };
+
         if self.is_streamed {
             if type_str == "byte" {
                 "global::System.IO.Pipelines.PipeReader".to_owned()
@@ -98,33 +104,36 @@ impl ParameterExt for Parameter {
 }
 
 pub trait ParameterSliceExt {
-    fn to_argument_tuple(&self, prefix: &str) -> String;
-    fn to_tuple_type(&self, namespace: &str, context: TypeContext, ignore_optional: bool) -> String;
+    fn to_argument_tuple(&self) -> String;
+    fn to_tuple_type(&self, namespace: &str, context: TypeContext) -> String;
 }
 
 impl ParameterSliceExt for [&Parameter] {
-    fn to_argument_tuple(&self, prefix: &str) -> String {
+    /// Convert each parameter in this slice to it's argument representation.
+    /// This is the parameter's C# identifier (in camel case) with a `sliceP_` prefix.
+    /// If there are more than 1 parameters in this slice, it returns them wrapped in parenthesis (a tuple).
+    fn to_argument_tuple(&self) -> String {
         match self {
             [] => panic!("tuple type with no members"),
-            [member] => member.parameter_name_with_prefix(prefix),
+            [member] => member.parameter_name_with_prefix(),
             _ => format!(
                 "({})",
                 self.iter()
-                    .map(|m| m.parameter_name_with_prefix(prefix))
+                    .map(|m| m.parameter_name_with_prefix())
                     .collect::<Vec<String>>()
                     .join(", "),
             ),
         }
     }
 
-    fn to_tuple_type(&self, namespace: &str, context: TypeContext, ignore_optional: bool) -> String {
+    fn to_tuple_type(&self, namespace: &str, context: TypeContext) -> String {
         match self {
             [] => panic!("tuple type with no members"),
-            [member] => member.cs_type_string(namespace, context, ignore_optional),
+            [member] => member.cs_type_string(namespace, context),
             _ => format!(
                 "({})",
                 self.iter()
-                    .map(|m| m.cs_type_string(namespace, context, ignore_optional) + " " + &m.field_name())
+                    .map(|m| m.cs_type_string(namespace, context) + " " + &m.field_name())
                     .collect::<Vec<String>>()
                     .join(", "),
             ),

@@ -1,13 +1,13 @@
 // Copyright (c) ZeroC, Inc.
 
 use crate::builders::{AttributeBuilder, Builder, CommentBuilder, ContainerBuilder, FunctionBuilder, FunctionType};
+use crate::code_gen_util::TypeContext;
 use crate::cs_attributes::CsEncodedReturn;
 use crate::decoding::*;
 use crate::encoding::*;
 use crate::slicec_ext::*;
 use slicec::code_block::CodeBlock;
 use slicec::grammar::*;
-use slicec::utils::code_gen_util::*;
 
 pub fn generate_dispatch(interface_def: &Interface) -> CodeBlock {
     let namespace = interface_def.namespace();
@@ -108,7 +108,7 @@ fn request_class(interface_def: &Interface) -> CodeBlock {
             },
             &format!(
                 "global::System.Threading.Tasks.ValueTask<{}>",
-                &parameters.to_tuple_type(namespace, TypeContext::IncomingParam, false),
+                &parameters.to_tuple_type(namespace, TypeContext::IncomingParam),
             ),
             &operation.escape_identifier_with_prefix_and_suffix("Decode", "Async"),
             function_type,
@@ -192,7 +192,7 @@ fn response_class(interface_def: &Interface) -> CodeBlock {
         match non_streamed_returns.as_slice() {
             [param] => {
                 builder.add_parameter(
-                    &param.cs_type_string(namespace, TypeContext::OutgoingParam, false),
+                    &param.cs_type_string(namespace, TypeContext::OutgoingParam),
                     "returnValue",
                     None,
                     Some("The operation return value.".to_owned()),
@@ -201,7 +201,7 @@ fn response_class(interface_def: &Interface) -> CodeBlock {
             _ => {
                 for param in &non_streamed_returns {
                     builder.add_parameter(
-                        &param.cs_type_string(namespace, TypeContext::OutgoingParam, false),
+                        &param.cs_type_string(namespace, TypeContext::OutgoingParam),
                         &param.parameter_name(),
                         None,
                         param.formatted_param_doc_comment(),
@@ -230,15 +230,16 @@ fn response_class(interface_def: &Interface) -> CodeBlock {
 fn request_decode_body(operation: &Operation) -> CodeBlock {
     let mut code = CodeBlock::default();
 
+    let non_streamed_parameters = operation.non_streamed_parameters();
     let namespace = &operation.namespace();
+    let encoding = operation.encoding;
 
     if let Some(stream_member) = operation.streamed_parameter() {
-        let non_streamed_parameters = operation.non_streamed_parameters();
         if non_streamed_parameters.is_empty() {
             writeln!(
                 code,
                 "await request.DecodeEmptyArgsAsync({encoding}, cancellationToken).ConfigureAwait(false);",
-                encoding = operation.encoding.to_cs_encoding(),
+                encoding = encoding.to_cs_encoding(),
             );
 
             let stream_type = stream_member.data_type();
@@ -252,7 +253,7 @@ fn request_decode_body(operation: &Operation) -> CodeBlock {
                         "\
 var payloadContinuation = IceRpc.IncomingFrameExtensions.DetachPayload(request);
 return {}",
-                        decode_operation_stream(stream_member, namespace, operation.encoding, true)
+                        decode_operation_stream(stream_member, namespace, encoding, true)
                     )
                 }
             }
@@ -265,9 +266,9 @@ var {args} = await request.DecodeArgsAsync(
     {decode_func},
     defaultActivator: null,
     cancellationToken).ConfigureAwait(false);",
-                args = non_streamed_parameters.to_argument_tuple("sliceP_"),
-                encoding = operation.encoding.to_cs_encoding(),
-                decode_func = request_decode_func(operation).indent(),
+                args = non_streamed_parameters.to_argument_tuple(),
+                encoding = encoding.to_cs_encoding(),
+                decode_func = decode_non_streamed_parameters_func(&non_streamed_parameters, encoding).indent(),
             );
             let stream_type = stream_member.data_type();
             match stream_type.concrete_type() {
@@ -275,7 +276,7 @@ var {args} = await request.DecodeArgsAsync(
                     writeln!(
                         code,
                         "var {} = IceRpc.IncomingFrameExtensions.DetachPayload(request);",
-                        stream_member.parameter_name_with_prefix("sliceP_"),
+                        stream_member.parameter_name_with_prefix(),
                     )
                 }
                 _ => writeln!(
@@ -284,12 +285,11 @@ var {args} = await request.DecodeArgsAsync(
 var payloadContinuation = IceRpc.IncomingFrameExtensions.DetachPayload(request);
 var {stream_parameter_name} = {decode_operation_stream}
 ",
-                    stream_parameter_name = stream_member.parameter_name_with_prefix("sliceP_"),
-                    decode_operation_stream =
-                        decode_operation_stream(stream_member, namespace, operation.encoding, true),
+                    stream_parameter_name = stream_member.parameter_name_with_prefix(),
+                    decode_operation_stream = decode_operation_stream(stream_member, namespace, encoding, true),
                 ),
             }
-            writeln!(code, "return {};", operation.parameters().to_argument_tuple("sliceP_"));
+            writeln!(code, "return {};", operation.parameters().to_argument_tuple());
         }
     } else {
         writeln!(
@@ -301,37 +301,12 @@ request.DecodeArgsAsync(
     defaultActivator: {default_activator},
     cancellationToken)
 ",
-            encoding = operation.encoding.to_cs_encoding(),
-            decode_func = request_decode_func(operation).indent(),
-            default_activator = default_activator(operation.encoding),
+            encoding = encoding.to_cs_encoding(),
+            decode_func = decode_non_streamed_parameters_func(&non_streamed_parameters, encoding).indent(),
+            default_activator = default_activator(encoding),
         );
     }
     code
-}
-
-fn request_decode_func(operation: &Operation) -> CodeBlock {
-    let namespace = &operation.namespace();
-
-    let parameters = operation.non_streamed_parameters();
-    assert!(!parameters.is_empty());
-
-    let use_default_decode_func = parameters.len() == 1
-        && get_bit_sequence_size(operation.encoding, &parameters) == 0
-        && !parameters.first().unwrap().is_tagged();
-
-    if use_default_decode_func {
-        let param = parameters.first().unwrap();
-        decode_func(param.data_type(), namespace, operation.encoding)
-    } else {
-        format!(
-            "(ref SliceDecoder decoder) =>
-{{
-    {}
-}}",
-            decode_operation(operation, true).indent(),
-        )
-        .into()
-    }
 }
 
 fn operation_declaration(operation: &Operation) -> CodeBlock {
@@ -410,7 +385,7 @@ await request.DecodeEmptyArgsAsync({encoding}, cancellationToken).ConfigureAwait
             writeln!(
                 check_and_decode,
                 "var {var_name} = await Request.Decode{async_operation_name}(request, cancellationToken).ConfigureAwait(false);",
-                var_name = parameter.parameter_name_with_prefix("sliceP_"),
+                var_name = parameter.parameter_name_with_prefix(),
             )
         }
         _ => {
@@ -425,7 +400,7 @@ await request.DecodeEmptyArgsAsync({encoding}, cancellationToken).ConfigureAwait
     let mut dispatch_and_return = CodeBlock::default();
 
     let mut args = match parameters.as_slice() {
-        [parameter] => vec![parameter.parameter_name_with_prefix("sliceP_")],
+        [parameter] => vec![parameter.parameter_name_with_prefix()],
         _ => parameters
             .into_iter()
             .map(|parameter| "args.".to_owned() + &parameter.field_name())

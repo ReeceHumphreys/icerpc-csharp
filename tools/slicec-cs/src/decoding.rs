@@ -1,6 +1,7 @@
 // Copyright (c) ZeroC, Inc.
 
 use crate::builders::{Builder, FunctionCallBuilder};
+use crate::code_gen_util::get_bit_sequence_size;
 use crate::cs_attributes::CsType;
 use crate::cs_util::*;
 use crate::member_util::get_sorted_members;
@@ -8,7 +9,6 @@ use crate::slicec_ext::*;
 use convert_case::Case;
 use slicec::code_block::CodeBlock;
 use slicec::grammar::*;
-use slicec::utils::code_gen_util::{get_bit_sequence_size, TypeContext};
 
 /// Compute how many bits are needed to decode the provided members, and if more than 0 bits are needed,
 /// this generates code that creates a new `BitSequenceReader` with the necessary capacity.
@@ -26,9 +26,7 @@ pub fn decode_fields(fields: &[&Field], encoding: Encoding) -> CodeBlock {
     let mut code = CodeBlock::default();
     initialize_bit_sequence_reader_for(fields, &mut code, encoding);
 
-    let action = |field_name, field_value| {
-        writeln!(code, "this.{field_name} = {field_value};")
-    };
+    let action = |field_name, field_value| writeln!(code, "this.{field_name} = {field_value};");
 
     decode_fields_core(fields, encoding, action);
     code
@@ -75,7 +73,7 @@ pub fn default_activator(encoding: Encoding) -> &'static str {
 fn decode_member(member: &impl Member, namespace: &str, encoding: Encoding) -> CodeBlock {
     let mut code = CodeBlock::default();
     let data_type = member.data_type();
-    let type_string = data_type.cs_type_string(namespace, TypeContext::IncomingParam, true);
+    let type_string = data_type.field_type_string(namespace, true);
 
     if data_type.is_optional {
         match data_type.concrete_type() {
@@ -168,19 +166,15 @@ fn decode_dictionary(dictionary_ref: &TypeRef<Dictionary>, namespace: &str, enco
     let value_type = &dictionary_ref.value_type;
 
     // decode key
-    let mut decode_key = decode_func(key_type, namespace, encoding);
+    let decode_key = decode_func(key_type, namespace, encoding);
 
     // decode value
     let mut decode_value = decode_func(value_type, namespace, encoding);
     if matches!(value_type.concrete_type(), Types::Sequence(_) | Types::Dictionary(_)) {
-        write!(
-            decode_value,
-            " as {}",
-            value_type.cs_type_string(namespace, TypeContext::Field, true),
-        );
+        write!(decode_value, " as {}", value_type.field_type_string(namespace, true));
     }
 
-    let dictionary_type = dictionary_ref.cs_type_string(namespace, TypeContext::IncomingParam, true);
+    let dictionary_type = dictionary_ref.incoming_parameter_type_string(namespace, true);
     let decode_key = decode_key.indent();
     let decode_value = decode_value.indent();
 
@@ -231,15 +225,11 @@ fn decode_sequence(sequence_ref: &TypeRef<Sequence>, namespace: &str, encoding: 
     if !has_cs_type_attribute && matches!(element_type.concrete_type(), Types::Sequence(_)) {
         // For nested sequences we want to cast Foo[][] returned by DecodeSequence to IList<Foo>[]
         // used in the request and response decode methods.
-        write!(
-            code,
-            "({}[])",
-            element_type.cs_type_string(namespace, TypeContext::Field, false),
-        );
+        write!(code, "({}[])", element_type.field_type_string(namespace, false));
     };
 
     if has_cs_type_attribute {
-        let sequence_type = sequence_ref.cs_type_string(namespace, TypeContext::IncomingParam, true);
+        let sequence_type = sequence_ref.incoming_parameter_type_string(namespace, true);
 
         let arg: Option<String> = match element_type.concrete_type() {
             Types::Primitive(primitive) if primitive.fixed_wire_size().is_some() && !element_type.is_optional => {
@@ -247,7 +237,7 @@ fn decode_sequence(sequence_ref: &TypeRef<Sequence>, namespace: &str, encoding: 
                 // faster than decoding the collection elements one by one.
                 Some(format!(
                     "decoder.DecodeSequence<{}>({})",
-                    element_type.cs_type_string(namespace, TypeContext::IncomingParam, true),
+                    element_type.incoming_parameter_type_string(namespace, true),
                     if matches!(primitive, Primitive::Bool) {
                         "checkElement: SliceDecoder.CheckBoolValue"
                     } else {
@@ -265,14 +255,14 @@ fn decode_sequence(sequence_ref: &TypeRef<Sequence>, namespace: &str, encoding: 
                 if enum_def.is_unchecked {
                     Some(format!(
                         "decoder.DecodeSequence<{}>()",
-                        element_type.cs_type_string(namespace, TypeContext::IncomingParam, true),
+                        element_type.incoming_parameter_type_string(namespace, true),
                     ))
                 } else {
                     Some(format!(
                         "\
 decoder.DecodeSequence(
     ({enum_type_name} e) => _ = {underlying_extensions_class}.As{name}(({underlying_type})e))",
-                        enum_type_name = element_type.cs_type_string(namespace, TypeContext::IncomingParam, false),
+                        enum_type_name = element_type.incoming_parameter_type_string(namespace, false),
                         underlying_extensions_class = enum_def.escape_scoped_identifier_with_suffix(
                             &format!(
                                 "{}Extensions",
@@ -332,7 +322,7 @@ decoder.DecodeSequenceOfOptionals(
                 write!(
                     code,
                     "decoder.DecodeSequence<{}>({})",
-                    element_type.cs_type_string(namespace, TypeContext::IncomingParam, true),
+                    element_type.incoming_parameter_type_string(namespace, true),
                     if matches!(primitive, Primitive::Bool) {
                         "checkElement: SliceDecoder.CheckBoolValue"
                     } else {
@@ -345,7 +335,7 @@ decoder.DecodeSequenceOfOptionals(
                     write!(
                         code,
                         "decoder.DecodeSequence<{}>()",
-                        element_type.cs_type_string(namespace, TypeContext::IncomingParam, true),
+                        element_type.incoming_parameter_type_string(namespace, true),
                     )
                 } else {
                     write!(
@@ -353,7 +343,7 @@ decoder.DecodeSequenceOfOptionals(
                         "\
 decoder.DecodeSequence(
     ({enum_type} e) => _ = {underlying_extensions_class}.As{name}(({underlying_type})e))",
-                        enum_type = element_type.cs_type_string(namespace, TypeContext::IncomingParam, false),
+                        enum_type = element_type.incoming_parameter_type_string(namespace, false),
                         underlying_extensions_class = enum_def.escape_scoped_identifier_with_suffix(
                             &format!(
                                 "{}Extensions",
@@ -400,11 +390,7 @@ fn decode_result_field(type_ref: &TypeRef, namespace: &str, encoding: Encoding) 
 
     // TODO: it's lame to have to do this here. We should provide a better API.
     if matches!(type_ref.concrete_type(), Types::Sequence(_) | Types::Dictionary(_)) {
-        write!(
-            decode_func,
-            " as {}",
-            type_ref.cs_type_string(namespace, TypeContext::Field, false),
-        );
+        write!(decode_func, " as {}", type_ref.field_type_string(namespace, false));
     }
 
     if type_ref.is_optional {
@@ -416,8 +402,7 @@ fn decode_result_field(type_ref: &TypeRef, namespace: &str, encoding: Encoding) 
         ));
     }
 
-    decode_func.indent();
-    decode_func
+    decode_func.indent()
 }
 
 pub fn decode_func(type_ref: &TypeRef, namespace: &str, encoding: Encoding) -> CodeBlock {
@@ -427,7 +412,7 @@ pub fn decode_func(type_ref: &TypeRef, namespace: &str, encoding: Encoding) -> C
 
 fn decode_func_body(type_ref: &TypeRef, namespace: &str, encoding: Encoding) -> CodeBlock {
     let mut code = CodeBlock::default();
-    let type_name = type_ref.cs_type_string(namespace, TypeContext::IncomingParam, true);
+    let type_name = type_ref.incoming_parameter_type_string(namespace, true);
 
     // When we decode the type, we decode it as a non-optional.
     // If the type is supposed to be optional, we cast it after decoding.
@@ -483,43 +468,60 @@ fn decode_func_body(type_ref: &TypeRef, namespace: &str, encoding: Encoding) -> 
     code
 }
 
-pub fn decode_operation(operation: &Operation, dispatch: bool) -> CodeBlock {
-    let mut code = CodeBlock::default();
-    let namespace = operation.namespace();
-    let encoding = operation.encoding;
+/// Returns a lambda function that takes a `SliceDecoder` and decodes the provided list of parameters from it.
+/// This function assumes the parameters are non-streamed, and that at least one such parameter was provided.
+pub fn decode_non_streamed_parameters_func(non_streamed_parameters: &[&Parameter], encoding: Encoding) -> CodeBlock {
+    // Ensure that the parameters are all non-streamed.
+    assert!(non_streamed_parameters.iter().all(|p| !p.is_streamed));
 
-    let non_streamed_parameters = if dispatch {
-        operation.non_streamed_parameters()
-    } else {
-        operation.non_streamed_return_members()
-    };
-    assert!(!non_streamed_parameters.is_empty());
+    match non_streamed_parameters {
+        [] => panic!("passed empty parameter list to `decode_non_streamed_parameters_func"),
 
-    initialize_bit_sequence_reader_for(&non_streamed_parameters, &mut code, operation.encoding);
+        // If there's only one parameter, it isn't tagged, and doesn't require a bit-sequence to decode,
+        // We return a simplified lambda function.
+        [param] if !param.is_tagged() && (encoding == Encoding::Slice1 || !param.data_type().is_optional) => {
+            decode_func(param.data_type(), &param.namespace(), encoding)
+        }
 
-    for parameter in get_sorted_members(&non_streamed_parameters) {
-        let param_type = parameter.data_type();
+        // Otherwise we return a full multi-line lambda function for decoding the parameters.
+        _ => {
+            let mut code = CodeBlock::default();
 
-        // For optional value types we have to use the full type as the compiler cannot
-        // disambiguate between null and the actual value type.
-        let param_type_string = match param_type.is_optional && param_type.is_value_type() {
-            true => param_type.cs_type_string(&namespace, TypeContext::IncomingParam, false),
-            false => "var".to_owned(),
-        };
+            initialize_bit_sequence_reader_for(non_streamed_parameters, &mut code, encoding);
 
-        let param_name = &parameter.parameter_name_with_prefix("sliceP_");
+            for parameter in get_sorted_members(non_streamed_parameters) {
+                let param_type = parameter.data_type();
+                let namespace = parameter.namespace();
 
-        let decode = match parameter.is_tagged() {
-            true => decode_tagged(parameter, &namespace, false, encoding),
-            false => decode_member(parameter, &namespace, encoding),
-        };
+                // For optional value types we have to use the full type as the compiler cannot
+                // disambiguate between null and the actual value type.
+                let param_type_string = match param_type.is_optional && param_type.is_value_type() {
+                    true => param_type.incoming_parameter_type_string(&namespace, false),
+                    false => "var".to_owned(),
+                };
 
-        writeln!(code, "{param_type_string} {param_name} = {decode};")
+                let param_name = &parameter.parameter_name_with_prefix();
+
+                let decode = match parameter.is_tagged() {
+                    true => decode_tagged(parameter, &namespace, false, encoding),
+                    false => decode_member(parameter, &namespace, encoding),
+                };
+
+                writeln!(code, "{param_type_string} {param_name} = {decode};")
+            }
+            writeln!(code, "return {};", non_streamed_parameters.to_argument_tuple());
+
+            let body_content = code.indent();
+            format!(
+                "\
+(ref SliceDecoder decoder) =>
+{{
+    {body_content}
+}}",
+            )
+            .into()
+        }
     }
-
-    writeln!(code, "return {};", non_streamed_parameters.to_argument_tuple("sliceP_"));
-
-    code
 }
 
 pub fn decode_operation_stream(
@@ -530,7 +532,7 @@ pub fn decode_operation_stream(
 ) -> CodeBlock {
     let cs_encoding = encoding.to_cs_encoding();
     let param_type = stream_member.data_type();
-    let param_type_str = param_type.cs_type_string(namespace, TypeContext::IncomingParam, false);
+    let param_type_str = param_type.incoming_parameter_type_string(namespace, false);
     let fixed_wire_size = param_type.fixed_wire_size();
 
     match param_type.concrete_type() {
