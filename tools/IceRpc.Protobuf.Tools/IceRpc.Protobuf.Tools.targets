@@ -5,6 +5,10 @@
     <UsingTask TaskName="IceRpc.Protobuf.Tools.OutputFileNamesTask" AssemblyFile="$(IceRpcProtobufToolsTaskAssembliesPath)IceRpc.Protobuf.Tools.dll" />
     <UsingTask TaskName="IceRpc.Protobuf.Tools.ProtocTask" AssemblyFile="$(IceRpcProtobufToolsTaskAssembliesPath)IceRpc.Protobuf.Tools.dll" />
     <UsingTask TaskName="IceRpc.Protobuf.Tools.UpToDateCheckTask" AssemblyFile="$(IceRpcProtobufToolsTaskAssembliesPath)IceRpc.Protobuf.Tools.dll" />
+    <!-- Import TelemetryTask -->
+    <UsingTask
+        TaskName="IceRpc.Protobuf.Tools.TelemetryTask"
+        AssemblyFile="$(IceRpcProtobufToolsTaskAssembliesPath)IceRpc.Protobuf.Tools.dll" />
     <ItemGroup>
         <PropertyPageSchema Include="$(MSBuildThisFileDirectory)ProtoFile.ItemDefinition.xaml" />
         <AvailableItemName Include="ProtoFile" />
@@ -53,6 +57,9 @@
             ScriptPath="$(IceRpcProtocGenPath)"
             Sources="%(_ProtoFile.Identity)"
             Condition="'%(UpToDate)' != 'true'"/>
+
+        <!-- Upload telemetry data -->
+        <TelemetryTask ScriptPath="$(IceRpcTelemetryPath)" />
         <!--
             Include all C# generated source items that have not been already included. We delay this until we are
             running the ProtoCompile target so that default includes are already processed.

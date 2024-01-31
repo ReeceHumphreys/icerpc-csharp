@@ -6,6 +6,11 @@
         TaskName="IceRpc.Slice.Tools.SliceCCSharpTask"
         AssemblyFile="$(SliceToolsTaskAssembliesPath)IceRpc.Slice.Tools.dll" />
 
+    <!-- Import TelemetryTask -->
+    <UsingTask
+        TaskName="IceRpc.Slice.Tools.TelemetryTask"
+        AssemblyFile="$(SliceToolsTaskAssembliesPath)IceRpc.Slice.Tools.dll" />
+
     <ItemGroup>
         <PropertyPageSchema Include="$(MSBuildThisFileDirectory)SliceFile.ItemDefinition.xaml" />
         <PropertyPageSchema Include="$(MSBuildThisFileDirectory)SliceFile.ProjectProperties.xaml">
@@ -55,6 +60,9 @@
             ToolsPath             = "$(SliceCompilerPath)"
             AdditionalOptions     = "%(SliceFile.AdditionalOptions)"
             Sources               = "@(SliceFile)"/>
+
+        <!-- Upload telemetry data -->
+        <TelemetryTask ScriptPath="$(IceRpcTelemetryPath)" />
 
         <!--
             Include all C# generated source items that have not been already included. We delay this until we are
