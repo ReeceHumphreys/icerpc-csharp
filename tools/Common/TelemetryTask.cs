@@ -6,7 +6,6 @@ using System.Runtime.InteropServices;
 public class TelemetryTask : ToolTask
 {
 
-
     /// <summary>Gets or sets the directory containing the telemetry scripts.</summary>
     [Required]
     public string ScriptPath { get; set; } = "";
