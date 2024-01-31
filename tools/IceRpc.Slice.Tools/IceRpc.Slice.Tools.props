@@ -8,7 +8,7 @@
         <IceRpcOSName Condition="$([MSBuild]::IsOSPlatform('Windows'))">windows</IceRpcOSName>
         <IceRpcOSName Condition="$([MSBuild]::IsOSPlatform('OSX'))">macos</IceRpcOSName>
         <IceRpcOSArch>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLower())</IceRpcOSArch>
-        <IceRpcTelemetryPath>$(MSBuildThisFileDirectory)../Common/IceRpc.Telemetry.Internal/bin/$(Configuration)/net8.0/</IceRpcTelemetryPath>
+        <TelemetryScriptPath>$(MSBuildThisFileDirectory)../Common/IceRpc.Telemetry.Internal/bin/$(Configuration)/net8.0/</TelemetryScriptPath>
     </PropertyGroup>
     <Choose>
         <When Condition="Exists('$(MSBuildThisFileDirectory)../slicec-cs')">
@@ -35,6 +35,18 @@
         <Otherwise>
             <PropertyGroup>
                 <SliceToolsTaskAssembliesPath>$(MSBuildThisFileDirectory)../tasks/</SliceToolsTaskAssembliesPath>
+            </PropertyGroup>
+        </Otherwise>
+    </Choose>
+    <Choose>
+        <When Condition=" '$(OS)' == 'Windows_NT' ">
+            <PropertyGroup>
+                <TelemetryScript>$(TelemetryScriptPath)\telemetry.bat</TelemetryScript>
+            </PropertyGroup>
+        </When>
+        <Otherwise>
+            <PropertyGroup>
+                <TelemetryScript>$(TelemetryScriptPath)/telemetry.sh</TelemetryScript>
             </PropertyGroup>
         </Otherwise>
     </Choose>

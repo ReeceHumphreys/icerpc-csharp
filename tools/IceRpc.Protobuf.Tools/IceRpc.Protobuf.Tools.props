@@ -8,6 +8,7 @@
         <IceRpcOSName Condition="$([MSBuild]::IsOSPlatform('Windows'))">windows</IceRpcOSName>
         <IceRpcOSName Condition="$([MSBuild]::IsOSPlatform('OSX'))">macos</IceRpcOSName>
         <IceRpcOSArch>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLower())</IceRpcOSArch>
+        <TelemetryScriptPath>$(MSBuildThisFileDirectory)../Common/IceRpc.Telemetry.Internal/bin/$(Configuration)/net8.0/</TelemetryScriptPath>
     </PropertyGroup>
     <Choose>
         <When Condition="Exists('$(MSBuildThisFileDirectory)../IceRpc.ProtocGen')">
@@ -16,7 +17,6 @@
             <PropertyGroup>
                 <IceRpcProtocPath>$(MSBuildThisFileDirectory)obj/tools/</IceRpcProtocPath>
                 <IceRpcProtocGenPath>$(MSBuildThisFileDirectory)../IceRpc.ProtocGen/bin/$(Configuration)/net8.0/</IceRpcProtocGenPath>
-                <IceRpcTelemetryPath>$(MSBuildThisFileDirectory)../Common/IceRpc.Telemetry.Internal/bin/$(Configuration)/net8.0/</IceRpcTelemetryPath>
             </PropertyGroup>
         </When>
         <Otherwise>
@@ -49,6 +49,18 @@
         <Otherwise>
             <PropertyGroup>
                 <IceRpcProtocPrefix>$(IceRpcOSName)_$(IceRpcOSArch)</IceRpcProtocPrefix>
+            </PropertyGroup>
+        </Otherwise>
+    </Choose>
+    <Choose>
+        <When Condition=" '$(OS)' == 'Windows_NT' ">
+            <PropertyGroup>
+                <TelemetryScript>$(TelemetryScriptPath)\telemetry.bat</TelemetryScript>
+            </PropertyGroup>
+        </When>
+        <Otherwise>
+            <PropertyGroup>
+                <TelemetryScript>$(TelemetryScriptPath)/telemetry.sh</TelemetryScript>
             </PropertyGroup>
         </Otherwise>
     </Choose>
