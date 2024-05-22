@@ -7,6 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- Copy the PDBs from the NuGet packages to get file names and line numbers in stack traces. -->
     <CopyDebugSymbolFilesFromPackages>true</CopyDebugSymbolFilesFromPackages>
+    <DisableTelemetry>true</DisableTelemetry>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="IceRpc.Slice.Tools" Version="0.2.1" PrivateAssets="All" />

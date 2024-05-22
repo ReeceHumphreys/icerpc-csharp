@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <!-- We don't generate a NuGet package for IceRpc.ProtocGen. The generator is packaged with IceRpc.Protobuf.Tools -->
     <IsPackable>false</IsPackable>
+    <DisableTelemetry>true</DisableTelemetry>
   </PropertyGroup>
 
   <ItemGroup>

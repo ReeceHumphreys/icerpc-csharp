@@ -10,6 +10,7 @@
         <IceRpcOSArch>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLower())</IceRpcOSArch>
         <IceRpcProtocPrefix>$(IceRpcOSName)_$(IceRpcOSArch)</IceRpcProtocPrefix>
         <TelemetryScriptPath>$(MSBuildThisFileDirectory)../Common/IceRpc.Telemetry.Internal/bin/$(Configuration)/net8.0/</TelemetryScriptPath>
+        <DisableTelemetry>true</DisableTelemetry>
     </PropertyGroup>
     <Choose>
         <When Condition="Exists('$(MSBuildThisFileDirectory)../IceRpc.ProtocGen')">
@@ -61,7 +62,7 @@
         </When>
         <Otherwise>
             <PropertyGroup>
-                <TelemetryScript>$(TelemetryScriptPath)/telemetry.sh</TelemetryScript>
+                <TelemetryScript>$(TelemetryScriptPath)telemetry.sh</TelemetryScript>
             </PropertyGroup>
         </Otherwise>
     </Choose>

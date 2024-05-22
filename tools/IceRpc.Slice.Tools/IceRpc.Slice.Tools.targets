@@ -56,7 +56,7 @@
             Sources               = "@(SliceFile)"/>
 
         <!-- Upload telemetry data -->
-        <Exec Command="$(TelemetryScript)" />
+        <Exec Command="$(TelemetryScript)" Condition="'$(DisableTelemetry)' != 'true'" />
 
         <!--
             Include all C# generated source items that have not been already included. We delay this until we are
