@@ -2,6 +2,7 @@
   "version": "0.2",
   "language": "en",
   "words": [
+    "aarch",
     "ALPN",
     "apos",
     "appsettings",
@@ -22,11 +23,13 @@
     "ECONNRESET",
     "EPIPE",
     "finalizers",
+    "globalconfig",
     "globaltool",
     "icerpc",
     "Idempotency",
     "localizable",
     "Memberwise",
+    "middlebox",
     "Nagle",
     "netstandard",
     "Nonmutating",
@@ -37,8 +40,8 @@
     "peekable",
     "pingable",
     "Proto",
-    "Protoc",
     "Protobuf",
+    "Protoc",
     "QUIC",
     "reportgenerator",
     "retryable",
@@ -69,5 +72,8 @@
     "rust",
     "softwareTerms",
     "en_US"
+  ],
+  "enableFiletypes": [
+    "slice"
   ]
 }

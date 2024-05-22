@@ -1,12 +1,12 @@
 // Copyright (c) ZeroC, Inc.
 
+use crate::code_block::CodeBlock;
 use crate::code_gen_util::TypeContext;
 use crate::comments::CommentTag;
 use crate::cs_attributes::CsType;
 use crate::cs_util::*;
 use crate::member_util::escape_parameter_name;
 use crate::slicec_ext::*;
-use slicec::code_block::CodeBlock;
 use slicec::grammar::*;
 
 pub trait Builder {
@@ -139,7 +139,7 @@ impl ContainerBuilder {
 
     pub fn add_fields(&mut self, fields: &[&Field]) -> &mut Self {
         for field in fields {
-            let type_string = field.data_type().field_type_string(&field.namespace(), false);
+            let type_string = field.data_type().field_type_string(&field.namespace());
 
             self.add_field(
                 &field.field_name(),
@@ -514,6 +514,7 @@ impl Builder for FunctionBuilder {
 #[derive(Debug, Clone)]
 pub struct FunctionCallBuilder {
     callable: String,
+    type_argument: Option<String>,
     arguments: Vec<String>,
     arguments_on_newline: bool,
     use_semicolon: bool,
@@ -523,6 +524,7 @@ impl FunctionCallBuilder {
     pub fn new(callable: impl Into<String>) -> FunctionCallBuilder {
         FunctionCallBuilder {
             callable: callable.into(),
+            type_argument: None,
             arguments: vec![],
             arguments_on_newline: false,
             use_semicolon: true,
@@ -536,6 +538,11 @@ impl FunctionCallBuilder {
 
     pub fn use_semicolon(&mut self, use_semicolon: bool) -> &mut Self {
         self.use_semicolon = use_semicolon;
+        self
+    }
+
+    pub fn set_type_argument<T: ToString>(&mut self, type_argument: T) -> &mut Self {
+        self.type_argument = Some(type_argument.to_string());
         self
     }
 
@@ -561,10 +568,15 @@ impl FunctionCallBuilder {
 
 impl Builder for FunctionCallBuilder {
     fn build(&self) -> CodeBlock {
-        let mut function_call = if self.arguments_on_newline {
-            format!("{}(\n    {})", self.callable, self.arguments.join(",\n    "))
+        let type_arg = match &self.type_argument {
+            Some(arg) => format!("<{arg}>"),
+            None => "".to_owned(),
+        };
+
+        let mut function_call = if self.arguments_on_newline && !self.arguments.is_empty() {
+            format!("{}{type_arg}(\n    {})", self.callable, self.arguments.join(",\n    "))
         } else {
-            format!("{}({})", self.callable, self.arguments.join(", "))
+            format!("{}{type_arg}({})", self.callable, self.arguments.join(", "))
         };
 
         if self.use_semicolon {

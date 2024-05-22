@@ -3,12 +3,12 @@
 use crate::builders::{
     AttributeBuilder, Builder, CommentBuilder, ContainerBuilder, FunctionBuilder, FunctionCallBuilder, FunctionType,
 };
+use crate::code_block::CodeBlock;
 use crate::code_gen_util::TypeContext;
 use crate::decoding::*;
 use crate::encoding::*;
 use crate::member_util::*;
 use crate::slicec_ext::*;
-use slicec::code_block::CodeBlock;
 use slicec::grammar::attributes::Oneway;
 use slicec::grammar::*;
 
@@ -275,7 +275,7 @@ fn proxy_operation_impl(operation: &Operation) -> CodeBlock {
     let namespace = &operation.namespace();
     let operation_name = operation.escape_identifier();
     let async_operation_name = operation.escape_identifier_with_suffix("Async");
-    let return_task = operation.return_task(false);
+    let return_task = operation.invocation_return_task("Task");
 
     let parameters = operation.non_streamed_parameters();
 
@@ -347,7 +347,7 @@ if ({features_parameter}?.Get<IceRpc.Features.ICompressFeature>() is null)
                 invocation_builder.add_argument(
                     FunctionCallBuilder::new(format!(
                         "{stream_parameter_name}.ToPipeReader<{}>",
-                        stream_type.outgoing_parameter_type_string(namespace, false),
+                        stream_type.outgoing_parameter_type_string(namespace),
                     ))
                     .use_semicolon(false)
                     .add_argument(encode_stream_parameter(stream_type, namespace, operation.encoding).indent())
@@ -393,7 +393,7 @@ if ({features_parameter}?.Get<IceRpc.Features.ICompressFeature>() is null)
 
 fn proxy_base_operation_impl(operation: &Operation, namespace: &str) -> CodeBlock {
     let async_name = operation.escape_identifier_with_suffix("Async");
-    let return_task = operation.return_task(false);
+    let return_task = operation.invocation_return_task("Task");
     let mut operation_params = operation
         .parameters()
         .iter()
@@ -427,7 +427,7 @@ fn proxy_interface_operations(interface_def: &Interface) -> CodeBlock {
     for operation in operations {
         let mut builder = FunctionBuilder::new(
             "",
-            &operation.return_task(false),
+            &operation.invocation_return_task("Task"),
             &operation.escape_identifier_with_suffix("Async"),
             FunctionType::Declaration,
         );
@@ -464,9 +464,9 @@ fn request_class(interface_def: &Interface) -> CodeBlock {
         .add_generated_remark("static class", interface_def);
 
     for operation in operations {
-        let params: Vec<&Parameter> = operation.non_streamed_parameters();
+        let non_streamed_parameters = operation.non_streamed_parameters();
 
-        assert!(!params.is_empty());
+        assert!(!non_streamed_parameters.is_empty());
 
         let mut builder = FunctionBuilder::new(
             "public static",
@@ -479,14 +479,14 @@ fn request_class(interface_def: &Interface) -> CodeBlock {
             "summary",
             format!(
                 "Encodes the argument{s} of operation <c>{slice_operation}</c> into a request payload.",
-                s = if params.len() == 1 { "" } else { "s" },
+                s = if non_streamed_parameters.len() == 1 { "" } else { "s" },
                 slice_operation = operation.identifier(),
             ),
         );
 
-        for param in &params {
+        for param in &non_streamed_parameters {
             builder.add_parameter(
-                &param.cs_type_string(namespace, TypeContext::OutgoingParam),
+                &param.data_type().outgoing_parameter_type_string(namespace),
                 &param.parameter_name(),
                 None,
                 param.formatted_param_doc_comment(),
@@ -517,8 +517,6 @@ fn request_class(interface_def: &Interface) -> CodeBlock {
 }
 
 fn response_class(interface_def: &Interface) -> CodeBlock {
-    let namespace = &interface_def.namespace();
-
     let mut operations = interface_def.operations();
     operations.retain(|o| {
         // We need to generate a method to decode the responses of any operations with return members or any Slice1
@@ -541,21 +539,10 @@ fn response_class(interface_def: &Interface) -> CodeBlock {
     ).add_generated_remark("static class", interface_def);
 
     for operation in operations {
-        let members = operation.return_members();
-
         let function_type = if operation.streamed_return_member().is_some() || operation.encoding == Encoding::Slice1 {
             FunctionType::BlockBody
         } else {
             FunctionType::ExpressionBody
-        };
-
-        let return_type = if members.is_empty() {
-            "global::System.Threading.Tasks.ValueTask".to_owned()
-        } else {
-            format!(
-                "global::System.Threading.Tasks.ValueTask<{}>",
-                members.to_tuple_type(namespace, TypeContext::IncomingParam),
-            )
         };
 
         let mut builder = FunctionBuilder::new(
@@ -564,7 +551,7 @@ fn response_class(interface_def: &Interface) -> CodeBlock {
             } else {
                 "public static async"
             },
-            &return_type,
+            &operation.invocation_return_task("ValueTask"),
             &operation.escape_identifier_with_prefix_and_suffix("Decode", "Async"),
             function_type,
         );

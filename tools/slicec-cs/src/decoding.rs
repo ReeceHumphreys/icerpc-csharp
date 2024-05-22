@@ -1,13 +1,13 @@
 // Copyright (c) ZeroC, Inc.
 
 use crate::builders::{Builder, FunctionCallBuilder};
+use crate::code_block::CodeBlock;
 use crate::code_gen_util::get_bit_sequence_size;
 use crate::cs_attributes::CsType;
 use crate::cs_util::*;
 use crate::member_util::get_sorted_members;
 use crate::slicec_ext::*;
 use convert_case::Case;
-use slicec::code_block::CodeBlock;
 use slicec::grammar::*;
 
 /// Compute how many bits are needed to decode the provided members, and if more than 0 bits are needed,
@@ -73,7 +73,7 @@ pub fn default_activator(encoding: Encoding) -> &'static str {
 fn decode_member(member: &impl Member, namespace: &str, encoding: Encoding) -> CodeBlock {
     let mut code = CodeBlock::default();
     let data_type = member.data_type();
-    let type_string = data_type.field_type_string(namespace, true);
+    let type_string = remove_optional_modifier_from(data_type.field_type_string(namespace));
 
     if data_type.is_optional {
         match data_type.concrete_type() {
@@ -167,14 +167,8 @@ fn decode_dictionary(dictionary_ref: &TypeRef<Dictionary>, namespace: &str, enco
 
     // decode key
     let decode_key = decode_func(key_type, namespace, encoding);
-
-    // decode value
-    let mut decode_value = decode_func(value_type, namespace, encoding);
-    if matches!(value_type.concrete_type(), Types::Sequence(_) | Types::Dictionary(_)) {
-        write!(decode_value, " as {}", value_type.field_type_string(namespace, true));
-    }
-
-    let dictionary_type = dictionary_ref.incoming_parameter_type_string(namespace, true);
+    let decode_value = decode_func_with_cast(value_type, namespace, encoding, false);
+    let dictionary_type = remove_optional_modifier_from(dictionary_ref.incoming_parameter_type_string(namespace));
     let decode_key = decode_key.indent();
     let decode_value = decode_value.indent();
 
@@ -204,8 +198,8 @@ fn decode_result(result_type_ref: &TypeRef<ResultType>, namespace: &str, encodin
     let success_type = &result_type_ref.success_type;
     let failure_type = &result_type_ref.failure_type;
 
-    let decode_success = decode_result_field(success_type, namespace, encoding);
-    let decode_failure = decode_result_field(failure_type, namespace, encoding);
+    let decode_success = decode_func_with_cast(success_type, namespace, encoding, success_type.is_optional).indent();
+    let decode_failure = decode_func_with_cast(failure_type, namespace, encoding, failure_type.is_optional).indent();
 
     format!(
         "\
@@ -217,158 +211,69 @@ decoder.DecodeResult(
 }
 
 fn decode_sequence(sequence_ref: &TypeRef<Sequence>, namespace: &str, encoding: Encoding) -> CodeBlock {
-    let mut code = CodeBlock::default();
     let element_type = &sequence_ref.element_type;
-
+    let element_type_string = element_type.field_type_string(namespace);
+    let sequence_type = remove_optional_modifier_from(sequence_ref.incoming_parameter_type_string(namespace));
     let has_cs_type_attribute = sequence_ref.has_attribute::<CsType>();
+
+    let uses_bit_sequence = element_type.is_optional && encoding != Encoding::Slice1;
+    let mut uses_sequence_factory = false;
+
+    let function_name = match uses_bit_sequence {
+        true => "decoder.DecodeSequenceOfOptionals",
+        false => "decoder.DecodeSequence",
+    };
+    let mut builder = FunctionCallBuilder::new(function_name);
+    builder.arguments_on_newline(true);
+    builder.use_semicolon(false);
+
+    match element_type.concrete_type() {
+        Types::Primitive(primitive) if primitive.fixed_wire_size().is_some() && !uses_bit_sequence => {
+            builder.set_type_argument(remove_optional_modifier_from(element_type_string));
+            builder.add_argument_if(*primitive == Primitive::Bool, "checkElement: SliceDecoder.CheckBoolValue");
+        }
+        Types::Enum(enum_def) if enum_def.fixed_wire_size().is_some() && !uses_bit_sequence => {
+            if enum_def.is_unchecked {
+                builder.set_type_argument(remove_optional_modifier_from(element_type_string));
+            } else {
+                let underlying_type = enum_def.get_underlying_cs_type();
+                let enum_name = enum_def.cs_identifier(Case::Pascal);
+                let underlying_extensions_class = enum_def.escape_scoped_identifier_with_suffix(
+                    &(underlying_type.to_cs_case(Case::Pascal) + "Extensions"),
+                    namespace,
+                );
+                let decode_func = format!("({element_type_string} e) => _ = {underlying_extensions_class}.As{enum_name}(({underlying_type})e)");
+                builder.add_argument(decode_func);
+            }
+        }
+        _ => {
+            if has_cs_type_attribute {
+                uses_sequence_factory = true;
+                builder.add_argument(format!("sequenceFactory: (size) => new {sequence_type}(size)"));
+            }
+            builder.add_argument(decode_func(element_type, namespace, encoding).indent());
+        }
+    }
+
+    if has_cs_type_attribute && !uses_sequence_factory {
+        // If 'cs::type' is used on a sequence of fixed-size primitives (or enums with such an underlying type),
+        // instead of using a 'sequenceFactory', we pass the decoded sequence directly to the mapped type's constructor.
+        return FunctionCallBuilder::new(format!("new {sequence_type}"))
+            .arguments_on_newline(true)
+            .use_semicolon(false)
+            .add_argument(builder.build().indent())
+            .build();
+    }
 
     if !has_cs_type_attribute && matches!(element_type.concrete_type(), Types::Sequence(_)) {
         // For nested sequences we want to cast Foo[][] returned by DecodeSequence to IList<Foo>[]
         // used in the request and response decode methods.
-        write!(code, "({}[])", element_type.field_type_string(namespace, false));
-    };
-
-    if has_cs_type_attribute {
-        let sequence_type = sequence_ref.incoming_parameter_type_string(namespace, true);
-
-        let arg: Option<String> = match element_type.concrete_type() {
-            Types::Primitive(primitive) if primitive.fixed_wire_size().is_some() && !element_type.is_optional => {
-                // We always read an array even when mapped to a collection, as it's expected to be
-                // faster than decoding the collection elements one by one.
-                Some(format!(
-                    "decoder.DecodeSequence<{}>({})",
-                    element_type.incoming_parameter_type_string(namespace, true),
-                    if matches!(primitive, Primitive::Bool) {
-                        "checkElement: SliceDecoder.CheckBoolValue"
-                    } else {
-                        ""
-                    }
-                ))
-            }
-            Types::Enum(enum_def)
-                if enum_def.underlying.is_some()
-                    && enum_def.fixed_wire_size().is_some()
-                    && !element_type.is_optional =>
-            {
-                // We always read an array even when mapped to a collection, as it's expected to be
-                // faster than decoding the collection elements one by one.
-                if enum_def.is_unchecked {
-                    Some(format!(
-                        "decoder.DecodeSequence<{}>()",
-                        element_type.incoming_parameter_type_string(namespace, true),
-                    ))
-                } else {
-                    Some(format!(
-                        "\
-decoder.DecodeSequence(
-    ({enum_type_name} e) => _ = {underlying_extensions_class}.As{name}(({underlying_type})e))",
-                        enum_type_name = element_type.incoming_parameter_type_string(namespace, false),
-                        underlying_extensions_class = enum_def.escape_scoped_identifier_with_suffix(
-                            &format!(
-                                "{}Extensions",
-                                enum_def.get_underlying_cs_type().to_cs_case(Case::Pascal)
-                            ),
-                            namespace,
-                        ),
-                        name = enum_def.cs_identifier(Case::Pascal),
-                        underlying_type = enum_def.get_underlying_cs_type(),
-                    ))
-                }
-            }
-            _ => {
-                if encoding != Encoding::Slice1 && element_type.is_optional {
-                    write!(
-                        code,
-                        "\
-decoder.DecodeSequenceOfOptionals(
-    sequenceFactory: (size) => new {sequence_type}(size),
-    {decode_func})",
-                        decode_func = decode_func(element_type, namespace, encoding).indent(),
-                    );
-                } else {
-                    write!(
-                        code,
-                        "\
-decoder.DecodeSequence(
-    sequenceFactory: (size) => new {sequence_type}(size),
-    {decode_func})",
-                        decode_func = decode_func(element_type, namespace, encoding).indent(),
-                    );
-                }
-                None
-            }
-        };
-
-        if let Some(arg) = arg {
-            write!(
-                code,
-                "\
-new {sequence_type}(
-    {})",
-                CodeBlock::from(arg).indent(),
-            );
-        }
-    } else if encoding != Encoding::Slice1 && element_type.is_optional {
-        write!(
-            code,
-            "\
-decoder.DecodeSequenceOfOptionals(
-    {})",
-            decode_func(element_type, namespace, encoding).indent(),
-        )
-    } else {
-        match element_type.concrete_type() {
-            Types::Primitive(primitive) if primitive.fixed_wire_size().is_some() => {
-                write!(
-                    code,
-                    "decoder.DecodeSequence<{}>({})",
-                    element_type.incoming_parameter_type_string(namespace, true),
-                    if matches!(primitive, Primitive::Bool) {
-                        "checkElement: SliceDecoder.CheckBoolValue"
-                    } else {
-                        ""
-                    }
-                )
-            }
-            Types::Enum(enum_def) if enum_def.underlying.is_some() && enum_def.fixed_wire_size().is_some() => {
-                if enum_def.is_unchecked {
-                    write!(
-                        code,
-                        "decoder.DecodeSequence<{}>()",
-                        element_type.incoming_parameter_type_string(namespace, true),
-                    )
-                } else {
-                    write!(
-                        code,
-                        "\
-decoder.DecodeSequence(
-    ({enum_type} e) => _ = {underlying_extensions_class}.As{name}(({underlying_type})e))",
-                        enum_type = element_type.incoming_parameter_type_string(namespace, false),
-                        underlying_extensions_class = enum_def.escape_scoped_identifier_with_suffix(
-                            &format!(
-                                "{}Extensions",
-                                enum_def.get_underlying_cs_type().to_cs_case(Case::Pascal)
-                            ),
-                            namespace,
-                        ),
-                        name = enum_def.cs_identifier(Case::Pascal),
-                        underlying_type = enum_def.get_underlying_cs_type(),
-                    );
-                }
-            }
-            _ => {
-                write!(
-                    code,
-                    "\
-decoder.DecodeSequence(
-    {})",
-                    decode_func(element_type, namespace, encoding).indent(),
-                )
-            }
-        }
+        let code = builder.build();
+        let element_type_string = element_type.field_type_string(namespace);
+        return CodeBlock::from(format!("({element_type_string}[]){code}"));
     }
 
-    code
+    builder.build()
 }
 
 fn decode_stream_parameter(type_ref: &TypeRef, namespace: &str, encoding: Encoding) -> CodeBlock {
@@ -382,41 +287,49 @@ fn decode_stream_parameter(type_ref: &TypeRef, namespace: &str, encoding: Encodi
     }
 }
 
-fn decode_result_field(type_ref: &TypeRef, namespace: &str, encoding: Encoding) -> CodeBlock {
-    let mut decode_func = match type_ref.is_optional {
-        true => decode_func_body(type_ref, namespace, encoding),
-        false => decode_func(type_ref, namespace, encoding),
+/// Like [`decode_func`], this returns a lambda function that takes a `SliceDecoder` and returns a decoded type.
+/// The difference between this function and `decode_func` is this function writes a cast on the lambda, if the
+/// type being decoded is mapped differently as a field/parameter (ie. sequence and dictionary types).
+///
+/// This function must be called instead of `decode_func` when we're decoding in the context of a generic type
+/// (ie. `decode_result` or `decode_dictionary`). The C# compiler cannot implicitly convert nested generic types,
+/// so we need these casts to satisfy the type system.
+fn decode_func_with_cast(type_ref: &TypeRef, namespace: &str, encoding: Encoding, is_optional: bool) -> CodeBlock {
+    let decode_func = decode_func_body(type_ref, namespace, encoding);
+    let cast = match type_ref.concrete_type() {
+        Types::Sequence(_) | Types::Dictionary(_) => format!("({})", type_ref.field_type_string(namespace)),
+        _ => "".to_owned(),
     };
 
-    // TODO: it's lame to have to do this here. We should provide a better API.
-    if matches!(type_ref.concrete_type(), Types::Sequence(_) | Types::Dictionary(_)) {
-        write!(decode_func, " as {}", type_ref.field_type_string(namespace, false));
-    }
-
-    if type_ref.is_optional {
-        decode_func = CodeBlock::from(format!(
+    if is_optional {
+        format!(
             "\
 (ref SliceDecoder decoder) => decoder.DecodeBool() ?
-    {decode_func}
+    {cast}{decode_func}
     : null",
-        ));
+        )
+    } else {
+        format!("(ref SliceDecoder decoder) => {cast}{decode_func}")
     }
-
-    decode_func.indent()
+    .into()
 }
 
-pub fn decode_func(type_ref: &TypeRef, namespace: &str, encoding: Encoding) -> CodeBlock {
+fn decode_func(type_ref: &TypeRef, namespace: &str, encoding: Encoding) -> CodeBlock {
     let decode_func_body = decode_func_body(type_ref, namespace, encoding);
     CodeBlock::from(format!("(ref SliceDecoder decoder) => {decode_func_body}"))
 }
 
 fn decode_func_body(type_ref: &TypeRef, namespace: &str, encoding: Encoding) -> CodeBlock {
     let mut code = CodeBlock::default();
-    let type_name = type_ref.incoming_parameter_type_string(namespace, true);
+    let type_name = remove_optional_modifier_from(type_ref.incoming_parameter_type_string(namespace));
 
-    // When we decode the type, we decode it as a non-optional.
-    // If the type is supposed to be optional, we cast it after decoding.
-    if type_ref.is_optional {
+    // When we decode the type, we decode it as a non-optional. If the type is supposed to be optional, we cast it after
+    // decoding. Except for sequences and dictionaries, because we always cast them anyways, and for optional custom
+    // types, since the 'DecodeNullableX' we use to decode already returns a nullable type (so no cast needed).
+    if type_ref.is_optional
+        && !matches!(type_ref.concrete_type(), Types::Sequence(_) | Types::Dictionary(_))
+        && !matches!(type_ref.concrete_type(), Types::CustomType(_) if encoding == Encoding::Slice1)
+    {
         write!(code, "({type_name}?)");
     }
 
@@ -450,18 +363,17 @@ fn decode_func_body(type_ref: &TypeRef, namespace: &str, encoding: Encoding) -> 
         }
         TypeRefs::Struct(_) => write!(code, "new {type_name}(ref decoder)"),
         TypeRefs::CustomType(custom_type_ref) => {
-            write!(
-                code,
-                "{decoder_extensions_class}.Decode{nullable}{name}(ref decoder)",
-                decoder_extensions_class =
-                    custom_type_ref.escape_scoped_identifier_with_suffix("SliceDecoderExtensions", namespace),
-                name = custom_type_ref.cs_identifier(Case::Pascal),
-                nullable = if encoding == Encoding::Slice1 && type_ref.is_optional {
-                    "Nullable"
-                } else {
-                    ""
-                },
-            )
+            let extensions_class =
+                custom_type_ref.escape_scoped_identifier_with_suffix("SliceDecoderExtensions", namespace);
+            let identifier = custom_type_ref.cs_identifier(Case::Pascal);
+
+            // We use the 'Nullable' decoding function here, even for tags, to ensure interop with Ice.
+            // Because an Ice client could send a tagged proxy that is 'set' to 'null'.
+            if type_ref.is_optional && encoding == Encoding::Slice1 {
+                write!(code, "{extensions_class}.DecodeNullable{identifier}(ref decoder)");
+            } else {
+                write!(code, "{extensions_class}.Decode{identifier}(ref decoder)");
+            }
         }
         TypeRefs::Class(_) => panic!("unexpected, see is_class_type above"),
     }
@@ -496,7 +408,7 @@ pub fn decode_non_streamed_parameters_func(non_streamed_parameters: &[&Parameter
                 // For optional value types we have to use the full type as the compiler cannot
                 // disambiguate between null and the actual value type.
                 let param_type_string = match param_type.is_optional && param_type.is_value_type() {
-                    true => param_type.incoming_parameter_type_string(&namespace, false),
+                    true => param_type.incoming_parameter_type_string(&namespace),
                     false => "var".to_owned(),
                 };
 
@@ -532,7 +444,7 @@ pub fn decode_operation_stream(
 ) -> CodeBlock {
     let cs_encoding = encoding.to_cs_encoding();
     let param_type = stream_member.data_type();
-    let param_type_str = param_type.incoming_parameter_type_string(namespace, false);
+    let param_type_str = param_type.incoming_parameter_type_string(namespace);
     let fixed_wire_size = param_type.fixed_wire_size();
 
     match param_type.concrete_type() {

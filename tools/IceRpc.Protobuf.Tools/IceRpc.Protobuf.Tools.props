@@ -8,6 +8,7 @@
         <IceRpcOSName Condition="$([MSBuild]::IsOSPlatform('Windows'))">windows</IceRpcOSName>
         <IceRpcOSName Condition="$([MSBuild]::IsOSPlatform('OSX'))">macos</IceRpcOSName>
         <IceRpcOSArch>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLower())</IceRpcOSArch>
+        <IceRpcProtocPrefix>$(IceRpcOSName)_$(IceRpcOSArch)</IceRpcProtocPrefix>
         <TelemetryScriptPath>$(MSBuildThisFileDirectory)../Common/IceRpc.Telemetry.Internal/bin/$(Configuration)/net8.0/</TelemetryScriptPath>
     </PropertyGroup>
     <Choose>

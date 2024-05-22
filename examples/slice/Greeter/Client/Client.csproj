@@ -2,7 +2,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- Copy the PDBs from the NuGet packages to get file names and line numbers in stack traces. -->
@@ -10,7 +9,11 @@
   </PropertyGroup>
   <ItemGroup>
     <SliceFile Include="../slice/Greeter.slice" />
-    <PackageReference Include="IceRpc.Slice.Tools" Version="$(Version)" PrivateAssets="All" />
-    <PackageReference Include="IceRpc.Slice" Version="$(Version)" />
+    <PackageReference Include="IceRpc.Slice.Tools" Version="$(IceRpcVersion)" PrivateAssets="All" />
+    <PackageReference Include="IceRpc.Slice" Version="$(IceRpcVersion)" />
+    <PackageReference Include="StyleCop.Analyzers" Version="$(StyleCopAnalyzersVersion)">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 </Project>

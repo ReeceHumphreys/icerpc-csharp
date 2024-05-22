@@ -31,14 +31,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Build
         uses: ./.github/actions/build-compiler
         with:
           cargo-build-args: --release
           target: ${{ matrix.target }}
       - name: Archive Build
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: slicec-cs-${{ matrix.target }}
           path: tools/slicec-cs/target/${{ matrix.target }}/release/${{ matrix.compiler-exe }}
@@ -51,16 +51,18 @@ jobs:
       SIGN_PASSWORD: ${{ secrets.SIGN_PASSWORD }}
       SignTool: C:\Program Files (x86)\Windows Kits\10\bin\10.0.20348.0\x64\signtool.exe
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Create Code Signing Certificate
         run: |
           Set-Content -Path $env:GITHUB_WORKSPACE\certificate.pfx.base64 -Value '${{ secrets.SIGN_CERTIFICATE }}'
           certutil -decode $env:GITHUB_WORKSPACE\certificate.pfx.base64 $env:GITHUB_WORKSPACE\certificate.pfx
           Remove-Item $env:GITHUB_WORKSPACE\certificate.pfx.base64
       - name: Download slicec-cs compiler artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
       - name: Set version from tag
-        run: echo "VERSION=$($env:GITHUB_REF.TrimStart('refs/tags/v'))" >> $env:GITHUB_ENV
+        run: |
+          $version = $env:GITHUB_REF -replace '^refs/tags/v',''
+          echo "VERSION=$version" >> $env:GITHUB_ENV
       - name: Copy slicec-cs binaries to staging path
         run: |
           @("macos-x64", "macos-arm64", "linux-x64", "linux-arm64", "windows-x64") | ForEach-Object { New-Item -ItemType Directory -Path $env:GITHUB_WORKSPACE\tools\slicec-cs\staging -Name $_ }
@@ -86,7 +88,7 @@ jobs:
         working-directory: src/IceRpc.Templates
         run: dotnet pack --configuration Release --output ../../
       - name: Upload packages
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: packages
           path: |
@@ -105,27 +107,50 @@ jobs:
           - os: windows-2022
     runs-on: ${{ matrix.os }}
     needs: build-packages
-    - name: Download packages artifacts
-      uses: actions/download-artifact@v3
-      with:
-        name: packages
-    - name: Install packages to local NuGet repository
-      working-directory: packages
-      run: dotnet nuget push *.nupkg --source ~/.nuget/packages
-      if: runner.os == 'macOS' || runner.os == 'Linux'
-      shell: bash
-    - name: Install packages to local NuGet repository
-      working-directory: packages
-      run: dotnet nuget push *.nupkg --source $env:USERPROFILE/.nuget/packages
-      if: runner.os == 'Windows'
-      shell: powershell
-    - name: 🔨 Build Examples
-      run: for solution in examples/*/*/*.sln; do dotnet build "$solution"; done
-      if: runner.os == 'macOS' || runner.os == 'Linux'
-      shell: bash
-    - name: 🔨 Build Examples
-      run: |
-        $examples = Get-ChildItem -Path examples -Recurse -Include *.sln
-        foreach ($example in $examples) { dotnet build $example.FullName }
-      if: runner.os == 'Windows'
-      shell: powershell
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize NuGet local cache
+        run: dotnet restore
+      - name: Download packages artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: packages
+      - name: Install NuGet packages and dotnet new templates
+        working-directory: packages
+        run: |
+          dotnet nuget push *.nupkg --source ~/.nuget/packages
+          dotnet new install IceRpc.Templates*.nupkg
+        if: runner.os == 'macOS' || runner.os == 'Linux'
+        shell: bash
+      - name: Install NuGet packages and dotnet new templates
+        working-directory: packages
+        run: |
+          dotnet nuget push *.nupkg --source $env:USERPROFILE/.nuget/packages
+          dotnet new install IceRpc.Templates*.nupkg
+        if: runner.os == 'Windows'
+        shell: powershell
+      - name: Set version from tag
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+        if: runner.os == 'macOS' || runner.os == 'Linux'
+      - name: Set version from tag
+        run: |
+          $version = $env:GITHUB_REF -replace '^refs/tags/v',''
+          echo "VERSION=$version" >> $env:GITHUB_ENV
+        if: runner.os == 'Windows'
+      - name: 🔨 Build Examples
+        run: |
+          for solution in examples/*/*/*.sln; do dotnet build "$solution"; done
+        if: runner.os == 'macOS' || runner.os == 'Linux'
+        shell: bash
+      - name: 🔨 Build Examples
+        run: |
+          $examples = Get-ChildItem -Path examples -Recurse -Include *.sln
+          foreach ($example in $examples) { dotnet build $example.FullName }
+        if: runner.os == 'Windows'
+        shell: powershell
+      - name: 🧪 Test Templates
+        uses: ./.github/actions/test-templates
+        if: runner.os == 'macOS' || runner.os == 'Linux'

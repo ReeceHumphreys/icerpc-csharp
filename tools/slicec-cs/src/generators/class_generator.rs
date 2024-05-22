@@ -3,11 +3,11 @@
 use crate::builders::{
     AttributeBuilder, Builder, CommentBuilder, ContainerBuilder, FunctionBuilder, FunctionCallBuilder, FunctionType,
 };
+use crate::code_block::CodeBlock;
 use crate::decoding::decode_fields;
 use crate::encoding::encode_fields;
 use crate::member_util::*;
 use crate::slicec_ext::*;
-use slicec::code_block::CodeBlock;
 use slicec::grammar::{Class, Encoding, Field};
 
 pub fn generate_class(class_def: &Class) -> CodeBlock {
@@ -128,7 +128,7 @@ fn constructor(
 
     for field in base_fields.iter().chain(fields.iter()) {
         builder.add_parameter(
-            &field.data_type.field_type_string(namespace, false),
+            &field.data_type.field_type_string(namespace),
             &field.parameter_name(),
             None,
             field.formatted_doc_comment_summary(),

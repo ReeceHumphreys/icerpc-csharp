@@ -1,12 +1,12 @@
 // Copyright (c) ZeroC, Inc.
 
 use crate::builders::{AttributeBuilder, Builder, CommentBuilder, ContainerBuilder, FunctionBuilder, FunctionType};
+use crate::code_block::CodeBlock;
 use crate::code_gen_util::TypeContext;
 use crate::cs_attributes::CsEncodedReturn;
 use crate::decoding::*;
 use crate::encoding::*;
 use crate::slicec_ext::*;
-use slicec::code_block::CodeBlock;
 use slicec::grammar::*;
 
 pub fn generate_dispatch(interface_def: &Interface) -> CodeBlock {
@@ -192,7 +192,7 @@ fn response_class(interface_def: &Interface) -> CodeBlock {
         match non_streamed_returns.as_slice() {
             [param] => {
                 builder.add_parameter(
-                    &param.cs_type_string(namespace, TypeContext::OutgoingParam),
+                    &param.data_type().outgoing_parameter_type_string(namespace),
                     "returnValue",
                     None,
                     Some("The operation return value.".to_owned()),
@@ -201,7 +201,7 @@ fn response_class(interface_def: &Interface) -> CodeBlock {
             _ => {
                 for param in &non_streamed_returns {
                     builder.add_parameter(
-                        &param.cs_type_string(namespace, TypeContext::OutgoingParam),
+                        &param.data_type().outgoing_parameter_type_string(namespace),
                         &param.parameter_name(),
                         None,
                         param.formatted_param_doc_comment(),
@@ -312,7 +312,7 @@ request.DecodeArgsAsync(
 fn operation_declaration(operation: &Operation) -> CodeBlock {
     let mut builder = FunctionBuilder::new(
         "public",
-        &operation.return_task(true),
+        &operation.dispatch_return_task(),
         &operation.escape_identifier_with_suffix("Async"),
         FunctionType::Declaration,
     );

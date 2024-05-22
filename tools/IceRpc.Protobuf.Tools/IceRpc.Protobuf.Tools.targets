@@ -52,8 +52,7 @@
             ToolsPath="$(IceRpcProtocPath)$(IceRpcProtocPrefix)"
             ScriptPath="$(IceRpcProtocGenPath)"
             Sources="%(_ProtoFile.Identity)"
-            Condition="'%(UpToDate)' != 'true'"/>
-
+            Condition="'%(_ProtoFile.UpToDate)' != 'true'"/>
         <!-- Upload telemetry data -->
         <Exec Command="$(TelemetryScript)" />
         <!--
