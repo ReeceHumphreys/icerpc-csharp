@@ -42,7 +42,20 @@
             Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder)"/>
     </ItemGroup>
 
-    <Target Name="SliceC" BeforeTargets="CoreCompile" Condition="@(SliceFile) != ''">
+    <!-- Target to retrieve the IceRpc.Slice.Tools version -->
+    <Target Name="GetIceRpcSliceToolsVersion">
+        <!-- Create an item group to capture PackageReferences -->
+        <ItemGroup>
+            <IceRpcSliceToolsPackageReference Include="@(PackageReference)" Condition="'%(Identity)' == 'IceRpc.Slice.Tools'" />
+        </ItemGroup>
+
+        <!-- Extract the version from the PackageReference -->
+        <PropertyGroup>
+            <IceRpcSliceToolsVersion>%(IceRpcSliceToolsPackageReference.Version)</IceRpcSliceToolsVersion>
+        </PropertyGroup>
+    </Target>
+
+    <Target Name="SliceC" BeforeTargets="CoreCompile" Condition="@(SliceFile) != ''" DependsOnTargets="GetIceRpcSliceToolsVersion">
 
         <MakeDir Directories="%(SliceFile.OutputDir)"/>
 
@@ -56,7 +69,7 @@
             Sources               = "@(SliceFile)"/>
 
         <!-- Upload telemetry data -->
-        <Exec Command="$(TelemetryScript)" Condition="'$(DisableTelemetry)' != 'true'" />
+        <Exec Command="$(TelemetryScript) --version $(IceRpcSliceToolsVersion)" Condition="'$(DisableTelemetry)' != 'true'" ContinueOnError="true" />
 
         <!--
             Include all C# generated source items that have not been already included. We delay this until we are

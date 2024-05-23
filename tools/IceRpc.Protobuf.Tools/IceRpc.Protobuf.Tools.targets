@@ -30,7 +30,21 @@
             Include="**/*.proto"
             Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder)" />
     </ItemGroup>
-    <Target Name="ProtoCompile" BeforeTargets="CoreCompile" Condition="@(ProtoFile) != ''">
+
+    <!-- Target to retrieve the IceRpc.Protobuf.Tools version -->
+    <Target Name="GetIceRpcProtobufToolsVersion">
+        <!-- Create an item group to capture PackageReferences -->
+        <ItemGroup>
+            <IceRpcProtobufToolsPackageReference Include="@(PackageReference)" Condition="'%(Identity)' == 'IceRpc.Protobuf.Tools'" />
+        </ItemGroup>
+
+        <!-- Extract the version from the PackageReference -->
+        <PropertyGroup>
+            <IceRpcProtobufToolsVersion>%(IceRpcProtobufToolsPackageReference.Version)</IceRpcProtobufToolsVersion>
+        </PropertyGroup>
+    </Target>
+
+    <Target Name="ProtoCompile" BeforeTargets="CoreCompile" Condition="@(ProtoFile) != ''" DependsOnTargets="GetIceRpcProtobufToolsVersion">
       <MakeDir Directories="%(ProtoFile.OutputDir)" />
       <UpToDateCheckTask
           OutputDir="%(ProtoFile.OutputDir)"
@@ -54,7 +68,7 @@
             Sources="%(_ProtoFile.Identity)"
             Condition="'%(_ProtoFile.UpToDate)' != 'true'"/>
         <!-- Upload telemetry data -->
-        <Exec Command="$(TelemetryScript)" Condition="'$(DisableTelemetry)' != 'true'" />
+        <Exec Command="$(TelemetryScript) --version $(IceRpcProtobufToolsVersion)" Condition="'$(DisableTelemetry)' != 'true'" ContinueOnError="true" />
         <!--
             Include all C# generated source items that have not been already included. We delay this until we are
             running the ProtoCompile target so that default includes are already processed.

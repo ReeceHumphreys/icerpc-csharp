@@ -7,4 +7,5 @@ set -ue
 # executed from a symlink.
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-dotnet IceRpc.Telemetry.Internal.dll
+# Run the telemetry tool and redirect its output to null.
+dotnet IceRpc.Telemetry.Internal.dll "$@" > /dev/null 2>&1
