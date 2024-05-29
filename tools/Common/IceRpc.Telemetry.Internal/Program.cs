@@ -1,46 +1,35 @@
+// Copyright (c) ZeroC, Inc.
+
 using IceRpc;
-using Microsoft.Extensions.Logging;
+using IceRpc.Retry;
 using IceRpc.Telemetry.Internal;
 using System.Diagnostics;
-using System.Reflection;
-// Pull some information from the system / environment such as the OS version,
-// IceRPC version, etc for telemetry purposes.
+
+const int timeout = 3000; // The timeout for the RPC call in milliseconds.
+const int maxAttempts = 3; // The maximum number of attempts to retry the RPC call.
+const string uri = "icerpc://localhost"; // The URI of the server.
+
+// Parse command-line arguments to get the version
+string version = args
+    .SkipWhile(arg => arg != "--version")
+    .Skip(1)
+    .FirstOrDefault() ?? "unknown";
+
+// Create a telemetry object with the version, OS version, processor count, and thread count.
+string osVersion = Environment.OSVersion.ToString();
+int processorCount = Environment.ProcessorCount;
+int threadCount = Process.GetCurrentProcess().Threads.Count;
+var telemetry = new Telemetry(version, osVersion, processorCount, threadCount);
 
 try
 {
-    // Default value for version
-    string version = "unknown";
-
-    // Parse command-line arguments to get the version
-    for (int i = 0; i < args.Length; i++)
-    {
-        if (args[i] == "--version" && i + 1 < args.Length)
-        {
-            version = args[i + 1];
-            break;
-        }
-    }
-
-    string osVersion = Environment.OSVersion.ToString();
-    int processorCount = Environment.ProcessorCount;
-    int threadCount = Process.GetCurrentProcess().Threads.Count;
-    var telemetry = new Telemetry(version, osVersion, processorCount, threadCount);
-
-    // Create a simple console logger factory and configure the log level for category IceRpc.
-    using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
-        builder
-            .AddSimpleConsole()
-            .AddFilter("IceRpc", LogLevel.Information));
-
     // Create a client connection that logs messages to a logger with category IceRpc.ClientConnection.
-    await using var connection = new ClientConnection(
-        new Uri("icerpc://localhost"),
-        logger: loggerFactory.CreateLogger<ClientConnection>());
+    await using var connection = new ClientConnection(new Uri(uri));
 
     // Create an invocation pipeline with two interceptors.
     Pipeline pipeline = new Pipeline()
-        .UseLogger(loggerFactory)
-        .UseDeadline(defaultTimeout: TimeSpan.FromSeconds(10))
+        .UseRetry(new RetryOptions { MaxAttempts = maxAttempts })
+        .UseDeadline(defaultTimeout: TimeSpan.FromMilliseconds(timeout))
         .Into(connection);
 
     // Create a greeter proxy with this invocation pipeline.
@@ -52,7 +41,4 @@ try
     // Shutdown the connection.
     await connection.ShutdownAsync();
 }
-catch (Exception ex)
-{
-    Console.WriteLine("Error: {0}", ex.Message);
-}
+catch (Exception) { }

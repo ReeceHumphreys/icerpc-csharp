@@ -6,7 +6,7 @@ module TelemetryReporter
 interface Reporter {
     /// Uploads telemetry data.
     /// @param telemetry: The telemetry data to upload.
-    upload(telemetry: Telemetry)
+    [oneway] upload(telemetry: Telemetry)
 }
 
 struct Telemetry {

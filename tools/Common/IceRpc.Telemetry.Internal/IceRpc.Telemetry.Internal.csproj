@@ -12,9 +12,7 @@
     <PackageReference Include="IceRpc.Slice.Tools" Version="0.2.1" PrivateAssets="All" />
     <PackageReference Include="IceRpc.Slice" Version="0.2.1" />
     <PackageReference Include="IceRpc.Deadline" Version="0.2.1" />
-    <PackageReference Include="IceRpc.Logger" Version="0.2.1" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.*" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.*" />
+    <PackageReference Include="IceRpc.Retry" Version="0.2.1" />
     <None Include="telemetry.bat">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
