@@ -3,25 +3,12 @@
 using IceRpc;
 using IceRpc.Retry;
 using IceRpc.Telemetry.Internal;
-using System.Diagnostics;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 
 const int timeout = 3000; // The timeout for the RPC call in milliseconds.
 const int maxAttempts = 3; // The maximum number of attempts to retry the RPC call.
 const string uri = "icerpc://localhost"; // The URI of the server.
-
-// Parse command-line arguments to get the version
-string version = args
-    .SkipWhile(arg => arg != "--version")
-    .Skip(1)
-    .FirstOrDefault() ?? "unknown";
-
-// Create a telemetry object with the version, OS version, processor count, and thread count.
-string osVersion = Environment.OSVersion.ToString();
-int processorCount = Environment.ProcessorCount;
-int threadCount = Process.GetCurrentProcess().Threads.Count;
-var telemetry = new Telemetry(version, osVersion, processorCount, threadCount);
 
 // Load the root CA certificate
 using var rootCA = new X509Certificate2("certs/cacert.der");
@@ -51,7 +38,7 @@ Pipeline pipeline = new Pipeline()
 var reporter = new ReporterProxy(pipeline);
 
 // Upload the telemetry to the server.
-await reporter.UploadAsync(telemetry);
+await reporter.UploadAsync(new Telemetry(args));
 
 // Shutdown the connection.
 await connection.ShutdownAsync();
