@@ -4,6 +4,8 @@ using IceRpc;
 using IceRpc.Retry;
 using IceRpc.Telemetry.Internal;
 using System.Diagnostics;
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 
 const int timeout = 3000; // The timeout for the RPC call in milliseconds.
 const int maxAttempts = 3; // The maximum number of attempts to retry the RPC call.
@@ -23,8 +25,23 @@ var telemetry = new Telemetry(version, osVersion, processorCount, threadCount);
 
 try
 {
+    // Load the root CA certificate
+    using var rootCA = new X509Certificate2("certs/cacert.der");
+    var clientAuthenticationOptions = new SslClientAuthenticationOptions
+    {
+        RemoteCertificateValidationCallback = (sender, certificate, chain, errors) =>
+        {
+            using var customChain = new X509Chain();
+            customChain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+            customChain.ChainPolicy.DisableCertificateDownloads = true;
+            customChain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+            customChain.ChainPolicy.CustomTrustStore.Add(rootCA);
+            return customChain.Build((X509Certificate2)certificate!);
+        }
+    };
+
     // Create a client connection that logs messages to a logger with category IceRpc.ClientConnection.
-    await using var connection = new ClientConnection(new Uri(uri));
+    await using var connection = new ClientConnection(new Uri(uri), clientAuthenticationOptions);
 
     // Create an invocation pipeline with two interceptors.
     Pipeline pipeline = new Pipeline()
