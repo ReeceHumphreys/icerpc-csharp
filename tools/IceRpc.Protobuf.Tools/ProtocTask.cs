@@ -44,9 +44,6 @@ public class ProtocTask : ToolTask
     [Required]
     public string WorkingDirectory { get; set; } = "";
 
-    /// TODO
-    public bool DisableTelemetry { get; set; }
-
     /// <summary>The computed SHA-256 hash of the Slice files.</summary>
     [Output]
     public string? OutputHash { get; set; }
@@ -142,63 +139,9 @@ public class ProtocTask : ToolTask
 
     /// <inheritdoc/>
     protected override void LogToolCommand(string message) => Log.LogMessage(MessageImportance.Normal, message);
-
-    /// <inheritdoc/>
-    protected override int ExecuteTool(string pathToTool, string responseFileCommands, string commandLineCommands)
-    {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = pathToTool,
-            Arguments = commandLineCommands,
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            WorkingDirectory = GetWorkingDirectory()
-        };
-
-        using (var process = Process.Start(startInfo))
-        {
-            if (process == null)
-            {
-                Log.LogError("Failed to start the Slice compiler process.");
-                return -1;
-            }
-
-            string output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit();
-
-            // If telemetry is disabled, we don't need to parse the output
-            // and we can return immediately
-            if (DisableTelemetry)
-            {
-                return process.ExitCode;
-            }
-
-            try
-            {
-                using SHA256 sha256 = SHA256.Create();
-                string aggregatedHash = Sources
-                    .Select(source =>
-                    {
-                        byte[] fileBytes = File.ReadAllBytes(source.GetMetadata("FullPath"));
-                        byte[] hashBytes = sha256.ComputeHash(fileBytes);
-                        return HexStringConverter.ToHexString(hashBytes);
-                    })
-                    .Aggregate((current, next) => current + next);
-
-                OutputHash = aggregatedHash;
-            }
-            catch (Exception)
-            {
-                // We don't want to fail the build if we can't parse the output
-                Log.LogError($"Failed to parse the verbose Slice compiler output: {output}");
-            }
-
-            return process.ExitCode;
-        }
-    }
 }
 
+/// <summary>Converts a byte array to a hexadecimal string.</summary>
 public static class HexStringConverter
 {
     public static string ToHexString(byte[] bytes)

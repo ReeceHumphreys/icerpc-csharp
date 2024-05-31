@@ -10,12 +10,9 @@ using System.Security.Cryptography;
 
 namespace IceRpc.Protobuf.Tools;
 
-/// <summary>A MSBuild task to compute the C# file name generated from a given proto file.</summary>
+/// <summary>A MSBuild task to compute the SHA-256 hash of the Protobuf files.</summary>
 public class OutputHashTask : Task
 {
-    /// TODO
-    public bool DisableTelemetry { get; set; }
-
     /// <summary>Gets or sets the Protobuf source files.</summary>
     [Required]
     public ITaskItem[] Sources { get; set; } = Array.Empty<ITaskItem>();
@@ -24,15 +21,9 @@ public class OutputHashTask : Task
     [Output]
     public string? OutputHash { get; set; }
 
+    /// <inheritdoc/>
     public override bool Execute()
     {
-        // If telemetry is disabled, we don't need to compute the hash
-        if (DisableTelemetry == true)
-        {
-            return true;
-        }
-
-
         using SHA256 sha256 = SHA256.Create();
         string aggregatedHash = Sources
             .Select(source =>
