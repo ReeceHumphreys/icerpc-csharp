@@ -3,6 +3,7 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <!-- Import Tasks -->
     <UsingTask TaskName="IceRpc.Protobuf.Tools.OutputFileNamesTask" AssemblyFile="$(IceRpcProtobufToolsTaskAssembliesPath)IceRpc.Protobuf.Tools.dll" />
+    <UsingTask TaskName="IceRpc.Protobuf.Tools.OutputHashTask" AssemblyFile="$(IceRpcProtobufToolsTaskAssembliesPath)IceRpc.Protobuf.Tools.dll" />
     <UsingTask TaskName="IceRpc.Protobuf.Tools.ProtocTask" AssemblyFile="$(IceRpcProtobufToolsTaskAssembliesPath)IceRpc.Protobuf.Tools.dll" />
     <UsingTask TaskName="IceRpc.Protobuf.Tools.UpToDateCheckTask" AssemblyFile="$(IceRpcProtobufToolsTaskAssembliesPath)IceRpc.Protobuf.Tools.dll" />
     <ItemGroup>
@@ -72,10 +73,13 @@
             ScriptPath="$(IceRpcProtocGenPath)"
             Sources="%(_ProtoFile.Identity)"
             Condition="'%(_ProtoFile.UpToDate)' != 'true'"
+            DisableTelemetry= "$(DisableTelemetry)"/>
+        <OutputHashTask
+            Sources="%(_ProtoFile.Identity)"
             DisableTelemetry= "$(DisableTelemetry)"
             OutputHash="$(Hash)">
             <Output PropertyName="Hash" TaskParameter="OutputHash"/>
-        </ProtocTask>
+        </OutputHashTask>
 
         <!-- Upload telemetry data -->
         <Exec Command="$(TelemetryScript) --version $(IceRpcProtobufToolsVersion) --source 'IceRpc.Protobuf.Tools' --updated-files $(UpdatedFiles) --hash $(Hash)"

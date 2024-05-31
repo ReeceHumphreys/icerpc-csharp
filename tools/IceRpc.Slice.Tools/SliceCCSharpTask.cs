@@ -184,7 +184,7 @@ public class SliceCCSharpTask : ToolTask
 
             // If telemetry is disabled, we don't need to parse the output
             // and we can return immediately
-            if (DisableTelemetry)
+            if (DisableTelemetry == true)
             {
                 return process.ExitCode;
             }
