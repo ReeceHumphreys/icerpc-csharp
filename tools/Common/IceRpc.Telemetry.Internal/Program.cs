@@ -25,20 +25,27 @@ var clientAuthenticationOptions = new SslClientAuthenticationOptions
     }
 };
 
-// Create a client connection that logs messages to a logger with category IceRpc.ClientConnection.
-await using var connection = new ClientConnection(new Uri(uri), clientAuthenticationOptions);
+try
+{
+    // Create a client connection that logs messages to a logger with category IceRpc.ClientConnection.
+    await using var connection = new ClientConnection(new Uri(uri), clientAuthenticationOptions);
 
-// Create an invocation pipeline with two interceptors.
-Pipeline pipeline = new Pipeline()
-    .UseRetry(new RetryOptions { MaxAttempts = maxAttempts })
-    .UseDeadline(defaultTimeout: TimeSpan.FromMilliseconds(timeout))
-    .Into(connection);
+    // Create an invocation pipeline with two interceptors.
+    Pipeline pipeline = new Pipeline()
+        .UseRetry(new RetryOptions { MaxAttempts = maxAttempts })
+        .UseDeadline(defaultTimeout: TimeSpan.FromMilliseconds(timeout))
+        .Into(connection);
 
-// Create a greeter proxy with this invocation pipeline.
-var reporter = new ReporterProxy(pipeline);
+    // Create a greeter proxy with this invocation pipeline.
+    var reporter = new ReporterProxy(pipeline);
 
-// Upload the telemetry to the server.
-await reporter.UploadAsync(new Telemetry(args));
+    // Upload the telemetry to the server.
+    await reporter.UploadAsync(new Telemetry(args));
 
-// Shutdown the connection.
-await connection.ShutdownAsync();
+    // Shutdown the connection.
+    await connection.ShutdownAsync();
+}
+catch (Exception)
+{
+    // Consume all exceptions.
+}

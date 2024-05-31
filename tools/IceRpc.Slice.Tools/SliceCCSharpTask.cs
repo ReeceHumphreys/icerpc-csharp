@@ -41,6 +41,14 @@ public class SliceCCSharpTask : ToolTask
     protected override string ToolName =>
         RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "slicec-cs.exe" : "slicec-cs";
 
+    /// <summary>The computed SHA-256 hash of the Slice files.</summary>
+    [Output]
+    public string? OutputHash { get; set; }
+
+    /// <summary>The computed SHA-256 hash of the Slice files.</summary>
+    [Output]
+    public bool? UpdatedFiles { get; set; }
+
     /// <inheritdoc/>
     protected override string GenerateCommandLineCommands()
     {
@@ -63,6 +71,7 @@ public class SliceCCSharpTask : ToolTask
             builder.AppendTextUnquoted(option);
         }
         builder.AppendSwitch("--diagnostic-format=json");
+        builder.AppendSwitch("--verbose");
         builder.AppendFileNamesIfNotNull(
             Sources.Select(item => item.GetMetadata("FullPath").ToString()).ToArray(),
             " ");
@@ -145,4 +154,45 @@ public class SliceCCSharpTask : ToolTask
 
     /// <inheritdoc/>
     protected override void LogToolCommand(string message) => Log.LogMessage(MessageImportance.Normal, message);
+
+    /// <inheritdoc/>
+    protected override int ExecuteTool(string pathToTool, string responseFileCommands, string commandLineCommands)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = pathToTool,
+            Arguments = commandLineCommands,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = GetWorkingDirectory()
+        };
+
+        using (var process = Process.Start(startInfo))
+        {
+            if (process == null)
+            {
+                Log.LogError("Failed to start the Slice compiler process.");
+                return -1;
+            }
+
+            string output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+
+            try
+            {
+                var jsonDoc = System.Text.Json.JsonDocument.Parse(output);
+                OutputHash = jsonDoc.RootElement.GetProperty("hash").GetString();
+                UpdatedFiles = jsonDoc.RootElement.GetProperty("updated_files").GetBoolean();
+                Console.WriteLine($"UpdatedFiles: {UpdatedFiles}");
+            }
+            catch (Exception)
+            {
+                // We don't want to fail the build if we can't parse the output
+                Log.LogError($"Failed to parse the verbose Slice compiler output: {output}");
+            }
+
+            return process.ExitCode;
+        }
+    }
 }

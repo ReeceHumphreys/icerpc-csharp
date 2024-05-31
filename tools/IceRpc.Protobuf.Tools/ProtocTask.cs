@@ -5,9 +5,12 @@ using Microsoft.Build.Framework;
 using Microsoft.Build.Utilities;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace IceRpc.Protobuf.Tools;
 
@@ -41,6 +44,10 @@ public class ProtocTask : ToolTask
     [Required]
     public string WorkingDirectory { get; set; } = "";
 
+    /// <summary>The computed SHA-256 hash of the Slice files.</summary>
+    [Output]
+    public string? OutputHash { get; set; }
+
     /// <inheritdoc/>
     protected override string ToolName =>
         RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "protoc.exe" : "protoc";
@@ -67,6 +74,7 @@ public class ProtocTask : ToolTask
         builder.AppendFileNameIfNotNull(OutputDir);
 
         var searchPath = new List<string>(SearchPath);
+
         // Add the sources directories to the import search path
         var computedSources = new List<ITaskItem>();
         foreach (ITaskItem source in Sources)
@@ -131,4 +139,65 @@ public class ProtocTask : ToolTask
 
     /// <inheritdoc/>
     protected override void LogToolCommand(string message) => Log.LogMessage(MessageImportance.Normal, message);
+
+    /// <inheritdoc/>
+    protected override int ExecuteTool(string pathToTool, string responseFileCommands, string commandLineCommands)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = pathToTool,
+            Arguments = commandLineCommands,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = GetWorkingDirectory()
+        };
+
+        using (var process = Process.Start(startInfo))
+        {
+            if (process == null)
+            {
+                Log.LogError("Failed to start the Slice compiler process.");
+                return -1;
+            }
+
+            string output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+
+            try
+            {
+                using SHA256 sha256 = SHA256.Create();
+                string aggregatedHash = Sources
+                    .Select(source =>
+                    {
+                        byte[] fileBytes = File.ReadAllBytes(source.GetMetadata("FullPath"));
+                        byte[] hashBytes = sha256.ComputeHash(fileBytes);
+                        return HexStringConverter.ToHexString(hashBytes);
+                    })
+                    .Aggregate((current, next) => current + next);
+
+                OutputHash = aggregatedHash;
+            }
+            catch (Exception)
+            {
+                // We don't want to fail the build if we can't parse the output
+                Log.LogError($"Failed to parse the verbose Slice compiler output: {output}");
+            }
+
+            return process.ExitCode;
+        }
+    }
+}
+
+public static class HexStringConverter
+{
+    public static string ToHexString(byte[] bytes)
+    {
+        var sb = new StringBuilder(bytes.Length * 2);
+        foreach (byte b in bytes)
+        {
+            sb.Append(b.ToString("x2"));
+        }
+        return sb.ToString();
+    }
 }

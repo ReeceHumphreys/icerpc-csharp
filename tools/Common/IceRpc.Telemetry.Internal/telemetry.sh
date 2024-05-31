@@ -8,4 +8,4 @@ set -ue
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 # Run the telemetry tool and redirect its output to null.
-dotnet IceRpc.Telemetry.Internal.dll "$@" > /dev/null 2>&1
+dotnet IceRpc.Telemetry.Internal.dll "$@"

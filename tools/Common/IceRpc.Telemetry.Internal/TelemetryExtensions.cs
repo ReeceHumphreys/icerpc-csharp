@@ -18,9 +18,23 @@ public partial record struct Telemetry
             .Skip(1)
             .FirstOrDefault() ?? "unknown";
 
+        // Parse command-line arguments to get the source
+        string source = args
+            .SkipWhile(arg => arg != "--source")
+            .Skip(1)
+            .FirstOrDefault() ?? "unknown";
+
+        // Parse command-line arguments to get the hash
+        string hash = args
+            .SkipWhile(arg => arg != "--hash")
+            .Skip(1)
+            .FirstOrDefault() ?? "unknown";
+
         IceRpcVersion = version;
+        Source = source;
         OperatingSystem = Environment.OSVersion.ToString();
         ProcessorCount = Environment.ProcessorCount;
         Memory = Process.GetCurrentProcess().Threads.Count;
+        Hash = hash;
     }
 }

@@ -21,4 +21,10 @@ struct Telemetry {
 
     /// The amount of memory that the client has.
     Memory: varint32
+
+    /// The source of the telemetry data.
+    Source: string
+
+    /// The hashed slice files or protobuf files.
+    Hash: string
 }

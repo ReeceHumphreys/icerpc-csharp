@@ -66,9 +66,13 @@
             ToolsPath="$(IceRpcProtocPath)$(IceRpcProtocPrefix)"
             ScriptPath="$(IceRpcProtocGenPath)"
             Sources="%(_ProtoFile.Identity)"
-            Condition="'%(_ProtoFile.UpToDate)' != 'true'"/>
+            Condition="'%(_ProtoFile.UpToDate)' != 'true'"
+            OutputHash="$(Hash)">
+            <Output PropertyName="Hash" TaskParameter="OutputHash"/>
+        </ProtocTask>
+
         <!-- Upload telemetry data -->
-        <Exec Command="$(TelemetryScript) --version $(IceRpcProtobufToolsVersion)" Condition="'$(DisableTelemetry)' != 'true'" ContinueOnError="true" />
+        <Exec Command="$(TelemetryScript) --version $(IceRpcProtobufToolsVersion) --source 'IceRpc.Protobuf.Tools' --hash $(Hash)" Condition="'$(DisableTelemetry)' != 'true'" ContinueOnError="true" />
         <!--
             Include all C# generated source items that have not been already included. We delay this until we are
             running the ProtoCompile target so that default includes are already processed.

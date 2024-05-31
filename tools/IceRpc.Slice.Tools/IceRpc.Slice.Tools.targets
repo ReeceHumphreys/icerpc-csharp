@@ -66,10 +66,17 @@
             References            = "@(SliceDirectory->'%(FullPath)')"
             ToolsPath             = "$(SliceCompilerPath)"
             AdditionalOptions     = "%(SliceFile.AdditionalOptions)"
-            Sources               = "@(SliceFile)"/>
+            Sources               = "@(SliceFile)"
+            OutputHash            = "$(Hash)"
+            UpdatedFiles          = "$(UpdatedFiles)">
+            <Output PropertyName="Hash" TaskParameter="OutputHash"/>
+            <Output PropertyName="UpdatedFiles" TaskParameter="UpdatedFiles"/>
+        </SliceCCSharpTask>
 
         <!-- Upload telemetry data -->
-        <Exec Command="$(TelemetryScript) --version $(IceRpcSliceToolsVersion)" Condition="'$(DisableTelemetry)' != 'true'" ContinueOnError="true" />
+        <Exec Command="$(TelemetryScript) --version $(IceRpcSliceToolsVersion) --source 'IceRpc.Slice.Tools' --hash $(Hash)"
+              Condition="'$(DisableTelemetry)' != 'true'"
+              ContinueOnError="true" />
 
         <!--
             Include all C# generated source items that have not been already included. We delay this until we are
