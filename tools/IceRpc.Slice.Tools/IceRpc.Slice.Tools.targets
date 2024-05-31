@@ -67,6 +67,7 @@
             ToolsPath             = "$(SliceCompilerPath)"
             AdditionalOptions     = "%(SliceFile.AdditionalOptions)"
             Sources               = "@(SliceFile)"
+            DisableTelemetry      = "$(DisableTelemetry)"
             OutputHash            = "$(Hash)"
             UpdatedFiles          = "$(UpdatedFiles)">
             <Output PropertyName="Hash" TaskParameter="OutputHash"/>
@@ -74,7 +75,7 @@
         </SliceCCSharpTask>
 
         <!-- Upload telemetry data -->
-        <Exec Command="$(TelemetryScript) --version $(IceRpcSliceToolsVersion) --source 'IceRpc.Slice.Tools' --hash $(Hash)"
+        <Exec Command="$(TelemetryScript) --version $(IceRpcSliceToolsVersion) --source 'IceRpc.Slice.Tools' --hash $(Hash) --updated-files $(UpdatedFiles)"
               Condition="'$(DisableTelemetry)' != 'true'"
               ContinueOnError="true" />
 

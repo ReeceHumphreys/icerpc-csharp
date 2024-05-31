@@ -41,6 +41,9 @@ public class SliceCCSharpTask : ToolTask
     protected override string ToolName =>
         RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "slicec-cs.exe" : "slicec-cs";
 
+    /// TODO
+    public bool DisableTelemetry { get; set; }
+
     /// <summary>The computed SHA-256 hash of the Slice files.</summary>
     [Output]
     public string? OutputHash { get; set; }
@@ -178,6 +181,13 @@ public class SliceCCSharpTask : ToolTask
 
             string output = process.StandardOutput.ReadToEnd();
             process.WaitForExit();
+
+            // If telemetry is disabled, we don't need to parse the output
+            // and we can return immediately
+            if (DisableTelemetry)
+            {
+                return process.ExitCode;
+            }
 
             try
             {

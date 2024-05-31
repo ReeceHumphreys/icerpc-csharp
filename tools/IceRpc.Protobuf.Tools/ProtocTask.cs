@@ -44,6 +44,9 @@ public class ProtocTask : ToolTask
     [Required]
     public string WorkingDirectory { get; set; } = "";
 
+    /// TODO
+    public bool DisableTelemetry { get; set; }
+
     /// <summary>The computed SHA-256 hash of the Slice files.</summary>
     [Output]
     public string? OutputHash { get; set; }
@@ -163,6 +166,13 @@ public class ProtocTask : ToolTask
 
             string output = process.StandardOutput.ReadToEnd();
             process.WaitForExit();
+
+            // If telemetry is disabled, we don't need to parse the output
+            // and we can return immediately
+            if (DisableTelemetry)
+            {
+                return process.ExitCode;
+            }
 
             try
             {

@@ -30,11 +30,19 @@ public partial record struct Telemetry
             .Skip(1)
             .FirstOrDefault() ?? "unknown";
 
+        // Parse command-line arguments to get the updated-files
+        bool? updatedFiles = args
+            .SkipWhile(arg => arg != "--updated-files")
+            .Skip(1)
+            .Select(arg => bool.TryParse(arg, out bool result) ? (bool?)result : null)
+            .FirstOrDefault();
+
         IceRpcVersion = version;
         Source = source;
         OperatingSystem = Environment.OSVersion.ToString();
         ProcessorCount = Environment.ProcessorCount;
         Memory = Process.GetCurrentProcess().Threads.Count;
         Hash = hash;
+        UpdatedFiles = updatedFiles;
     }
 }
