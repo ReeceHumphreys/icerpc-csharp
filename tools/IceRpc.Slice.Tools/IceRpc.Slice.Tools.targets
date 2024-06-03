@@ -68,6 +68,7 @@
             AdditionalOptions     = "%(SliceFile.AdditionalOptions)"
             Sources               = "@(SliceFile)"
             DisableTelemetry      = "$(DisableTelemetry)"
+            Verbose               = "'$(DisableTelemetry)' != 'true'"
             OutputHash            = "$(Hash)"
             UpdatedFiles          = "$(UpdatedFiles)">
             <Output PropertyName="Hash" TaskParameter="OutputHash"/>

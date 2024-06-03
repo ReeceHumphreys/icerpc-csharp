@@ -37,9 +37,13 @@ public class SliceCCSharpTask : ToolTask
     [Required]
     public string WorkingDirectory { get; set; } = "";
 
+    // <summary>If verbose output should be enabled.</summary>
+    [Required]
+    public bool Verbose { get; set; } = false;
+
     /// <inheritdoc/>
     protected override string ToolName =>
-        RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "slicec-cs.exe" : "slicec-cs";
+    RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "slicec-cs.exe" : "slicec-cs";
 
     /// TODO
     public bool DisableTelemetry { get; set; }
@@ -74,7 +78,7 @@ public class SliceCCSharpTask : ToolTask
             builder.AppendTextUnquoted(option);
         }
         builder.AppendSwitch("--diagnostic-format=json");
-        builder.AppendSwitch("--verbose");
+        if (Verbose) builder.AppendSwitch("--verbose");
         builder.AppendFileNamesIfNotNull(
             Sources.Select(item => item.GetMetadata("FullPath").ToString()).ToArray(),
             " ");
@@ -182,24 +186,21 @@ public class SliceCCSharpTask : ToolTask
             string output = process.StandardOutput.ReadToEnd();
             process.WaitForExit();
 
-            // If telemetry is disabled, we don't need to parse the output
-            // and we can return immediately
-            if (DisableTelemetry == true)
+            if (Verbose == true)
             {
-                return process.ExitCode;
-            }
+                try
+                {
+                    var jsonDoc = System.Text.Json.JsonDocument.Parse(output);
+                    OutputHash = jsonDoc.RootElement.GetProperty("hash").GetString();
+                    UpdatedFiles = jsonDoc.RootElement.GetProperty("updated_files").GetBoolean();
+                    Console.WriteLine($"UpdatedFiles: {UpdatedFiles}");
+                }
+                catch (Exception)
+                {
+                    // Don't fail the build if we can't parse the output
+                }
 
-            try
-            {
-                var jsonDoc = System.Text.Json.JsonDocument.Parse(output);
-                OutputHash = jsonDoc.RootElement.GetProperty("hash").GetString();
-                UpdatedFiles = jsonDoc.RootElement.GetProperty("updated_files").GetBoolean();
-                Console.WriteLine($"UpdatedFiles: {UpdatedFiles}");
-            }
-            catch (Exception)
-            {
-                // We don't want to fail the build if we can't parse the output
-                Log.LogError($"Failed to parse the verbose Slice compiler output: {output}");
+                return process.ExitCode;
             }
 
             return process.ExitCode;
