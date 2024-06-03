@@ -58,6 +58,10 @@
     <Target Name="SliceC" BeforeTargets="CoreCompile" Condition="@(SliceFile) != ''" DependsOnTargets="GetIceRpcSliceToolsVersion">
 
         <MakeDir Directories="%(SliceFile.OutputDir)"/>
+        <PropertyGroup>
+            <Verbose>false</Verbose>
+            <Verbose Condition="'$(DisableTelemetry)' != 'true'">true</Verbose>
+        </PropertyGroup>
 
         <!-- Compile the Slice files -->
         <SliceCCSharpTask
@@ -67,8 +71,7 @@
             ToolsPath             = "$(SliceCompilerPath)"
             AdditionalOptions     = "%(SliceFile.AdditionalOptions)"
             Sources               = "@(SliceFile)"
-            DisableTelemetry      = "$(DisableTelemetry)"
-            Verbose               = "'$(DisableTelemetry)' != 'true'"
+            Verbose               = "$(Verbose)"
             OutputHash            = "$(Hash)"
             UpdatedFiles          = "$(UpdatedFiles)">
             <Output PropertyName="Hash" TaskParameter="OutputHash"/>

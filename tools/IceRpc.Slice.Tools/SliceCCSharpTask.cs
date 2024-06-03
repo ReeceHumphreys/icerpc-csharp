@@ -45,9 +45,6 @@ public class SliceCCSharpTask : ToolTask
     protected override string ToolName =>
     RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "slicec-cs.exe" : "slicec-cs";
 
-    /// TODO
-    public bool DisableTelemetry { get; set; }
-
     /// <summary>The computed SHA-256 hash of the Slice files.</summary>
     [Output]
     public string? OutputHash { get; set; }
