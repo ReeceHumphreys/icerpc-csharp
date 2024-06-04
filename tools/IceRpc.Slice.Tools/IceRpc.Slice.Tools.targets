@@ -77,7 +77,6 @@
             <Output PropertyName="Hash" TaskParameter="OutputHash"/>
             <Output PropertyName="UpdatedFiles" TaskParameter="UpdatedFiles"/>
         </SliceCCSharpTask>
-
         <!-- Upload telemetry data -->
         <Exec Command="$(TelemetryScript) --version $(IceRpcSliceToolsVersion) --source 'IceRpc.Slice.Tools' --hash $(Hash) --updated-files $(UpdatedFiles)"
               Condition="'$(DisableTelemetry)' != 'true'"

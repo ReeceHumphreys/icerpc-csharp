@@ -13,8 +13,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Common", "Common", "{10DD28
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IceRpc.Telemetry.Internal", "Common\IceRpc.Telemetry.Internal\IceRpc.Telemetry.Internal.csproj", "{A4F12AA3-1B55-4698-970E-FCD5A3FE1322}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IceRpc.ProtocTelemetry", "IceRpc.ProtocTelemetry\IceRpc.ProtocTelemetry.csproj", "{DA7E44D6-807A-4704-A742-7AAEE23F67BA}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
