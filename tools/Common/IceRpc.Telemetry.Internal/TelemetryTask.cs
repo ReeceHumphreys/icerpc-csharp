@@ -2,35 +2,41 @@
 
 using Microsoft.Build.Framework;
 using Microsoft.Build.Utilities;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Security.Cryptography;
 
 namespace IceRpc.Telemetry.Internal;
 
-/// TODO
+/// <summary>
+/// A custom MSBuild task to run telemetry commands.
+/// </summary>
 public class TelemetryTask : ToolTask
 {
-
-    /// TODO
+    /// <summary>
+    /// Gets or sets the version.
+    /// </summary>
     [Required]
-    public string Version { get; set; }
+    public string Version { get; set; } = "";
 
-    /// TODO
+    /// <summary>
+    /// Gets or sets the hash.
+    /// </summary>
     [Required]
-    public string Hash { get; set; }
+    public string Hash { get; set; } = "";
 
-    /// TODO
+    /// <summary>
+    /// Gets or sets the updated files.
+    /// </summary>
     [Required]
-    public string UpdatedFiles { get; set; }
+    public string UpdatedFiles { get; set; } = "";
 
-    /// TODO
+    /// <summary>
+    /// Gets or sets the source.
+    /// </summary>
     [Required]
-    public string Source { get; set; }
+    public string Source { get; set; } = "";
 
-    /// TODO
+    /// <summary>
+    /// Gets or sets the working directory.
+    /// </summary>
     [Required]
     public string WorkingDirectory { get; set; } = "";
 
@@ -41,15 +47,12 @@ public class TelemetryTask : ToolTask
     protected override string GetWorkingDirectory() => WorkingDirectory;
 
     /// <inheritdoc/>
-    protected override string GenerateFullPathToTool()
-    {
-        return ToolName;
-    }
+    protected override string GenerateFullPathToTool() => ToolName;
 
     /// <inheritdoc/>
     protected override string GenerateCommandLineCommands()
     {
-        CommandLineBuilder commandLine = new CommandLineBuilder();
+        var commandLine = new CommandLineBuilder();
         commandLine.AppendFileNameIfNotNull("IceRpc.Telemetry.Internal.dll");
         commandLine.AppendSwitch("--version");
         commandLine.AppendSwitch(Version);
@@ -62,4 +65,10 @@ public class TelemetryTask : ToolTask
 
         return commandLine.ToString();
     }
+
+    /// <summary>
+    /// Overriding this method to suppress any warnings or errors.
+    /// </summary>
+    /// <inheritdoc/>
+    protected override void LogEventsFromTextOutput(string singleLine, MessageImportance messageImportance) { }
 }
