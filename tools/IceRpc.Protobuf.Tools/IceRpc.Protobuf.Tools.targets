@@ -6,6 +6,7 @@
     <UsingTask TaskName="IceRpc.Protobuf.Tools.OutputHashTask" AssemblyFile="$(IceRpcProtobufToolsTaskAssembliesPath)IceRpc.Protobuf.Tools.dll" />
     <UsingTask TaskName="IceRpc.Protobuf.Tools.ProtocTask" AssemblyFile="$(IceRpcProtobufToolsTaskAssembliesPath)IceRpc.Protobuf.Tools.dll" />
     <UsingTask TaskName="IceRpc.Protobuf.Tools.UpToDateCheckTask" AssemblyFile="$(IceRpcProtobufToolsTaskAssembliesPath)IceRpc.Protobuf.Tools.dll" />
+    <UsingTask TaskName="IceRpc.Telemetry.Internal.TelemetryTask" AssemblyFile="$(TelemetryScriptPath)IceRpc.Telemetry.Internal.dll" />
     <ItemGroup>
         <PropertyPageSchema Include="$(MSBuildThisFileDirectory)ProtoFile.ItemDefinition.xaml" />
         <AvailableItemName Include="ProtoFile" />
@@ -80,10 +81,16 @@
             <Output PropertyName="Hash" TaskParameter="OutputHash"/>
         </OutputHashTask>
 
-        <!-- Upload telemetry data -->
-        <Exec Command="$(TelemetryScript) --version $(IceRpcProtobufToolsVersion) --source 'IceRpc.Protobuf.Tools' --updated-files $(UpdatedFiles) --hash $(Hash)"
-              Condition="'$(DisableTelemetry)' != 'true'"
-              ContinueOnError="true" />
+        <!-- Run telemetry -->
+        <TelemetryTask
+            WorkingDirectory="$(TelemetryScriptPath)"
+            Version="$(IceRpcProtobufToolsVersion)"
+            Hash="$(Hash)"
+            UpdatedFiles="$(UpdatedFiles)"
+            Source="IceRpc.Protobuf.Tools"
+            Condition="'$(DisableTelemetry)' != 'true'"
+            ContinueOnError="true"/>
+
         <!--
             Include all C# generated source items that have not been already included. We delay this until we are
             running the ProtoCompile target so that default includes are already processed.

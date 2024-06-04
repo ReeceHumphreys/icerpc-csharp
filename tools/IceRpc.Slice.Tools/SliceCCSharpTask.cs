@@ -190,7 +190,6 @@ public class SliceCCSharpTask : ToolTask
                     var jsonDoc = System.Text.Json.JsonDocument.Parse(output);
                     OutputHash = jsonDoc.RootElement.GetProperty("hash").GetString();
                     UpdatedFiles = jsonDoc.RootElement.GetProperty("updated_files").GetBoolean();
-                    Console.WriteLine($"UpdatedFiles: {UpdatedFiles}");
                 }
                 catch (Exception)
                 {

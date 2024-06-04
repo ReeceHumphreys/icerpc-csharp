@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Copyright (c) ZeroC, Inc. -->
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-    <!-- Import SliceCCSharpTask -->
+    <!-- Import Tasks -->
     <UsingTask
         TaskName="IceRpc.Slice.Tools.SliceCCSharpTask"
         AssemblyFile="$(SliceToolsTaskAssembliesPath)IceRpc.Slice.Tools.dll" />
+    <UsingTask
+        TaskName="IceRpc.Telemetry.Internal.TelemetryTask"
+        AssemblyFile="$(TelemetryScriptPath)IceRpc.Telemetry.Internal.dll" />
     <ItemGroup>
         <PropertyPageSchema Include="$(MSBuildThisFileDirectory)SliceFile.ItemDefinition.xaml" />
         <PropertyPageSchema Include="$(MSBuildThisFileDirectory)SliceFile.ProjectProperties.xaml">
@@ -77,10 +80,16 @@
             <Output PropertyName="Hash" TaskParameter="OutputHash"/>
             <Output PropertyName="UpdatedFiles" TaskParameter="UpdatedFiles"/>
         </SliceCCSharpTask>
-        <!-- Upload telemetry data -->
-        <Exec Command="$(TelemetryScript) --version $(IceRpcSliceToolsVersion) --source 'IceRpc.Slice.Tools' --hash $(Hash) --updated-files $(UpdatedFiles)"
-              Condition="'$(DisableTelemetry)' != 'true'"
-              ContinueOnError="true" />
+
+        <!-- Run telemetry -->
+        <TelemetryTask
+            WorkingDirectory="$(TelemetryScriptPath)"
+            Version="$(IceRpcSliceToolsVersion)"
+            Hash="$(Hash)"
+            UpdatedFiles="$(UpdatedFiles)"
+            Source="IceRpc.Slice.Tools"
+            Condition="'$(DisableTelemetry)' != 'true'"
+            ContinueOnError="true"/>
 
         <!--
             Include all C# generated source items that have not been already included. We delay this until we are
